@@ -51,23 +51,39 @@ template <class Integrals>
 void write_CoulombIntegrals(const std::string &fname,
                             const std::vector<DiracSpinor> &ci_sp_basis,
                             const std::map<nkm, int> &orbital_map,
-                            const Integrals &qk) {
-
-  // Modify this to allow for Sigma_2!
+                            const Integrals &qk, bool ci_dump_format = false,
+                            const Coulomb::meTable<double> &h1 = {},
+                            int twoJ = 0, int parity = 0) {
 
   static_assert(std::is_same_v<Integrals, Coulomb::QkTable> ||
                 std::is_same_v<Integrals, Coulomb::LkTable>);
 
-  // print all two-particle integrals Rk to file:
-  std::ofstream g_file(fname);
-  if (std::is_same_v<Integrals, Coulomb::QkTable>) {
-    g_file << "# a  b  c  d  g_abcd    ## (nb: abcd = badc = cdab = dcba; only "
-              "'smallest' is written)\n";
-  } else {
-    g_file << "# a  b  c  d  s_abcd    ## (nb: abcd = badc; only "
-              "'smallest' is written)\n";
+  int n_orb = 0;
+  for (const auto &a : ci_sp_basis) {
+    n_orb += a.twojp1();
   }
 
+  // print all two-particle integrals Rk to file:
+  std::ofstream g_file(fname);
+  if (ci_dump_format) {
+    assert((std::is_same_v<Integrals, Coulomb::QkTable>));
+    // I don't know what these all really mean...
+    fmt::print(
+        g_file,
+        "&FCI\n  NORB={},\n  NELEC=2,\n  MJ2={},\n  PI={},\n  ISYM=1,\n&END\n",
+        n_orb, twoJ, parity);
+  } else {
+    if (std::is_same_v<Integrals, Coulomb::QkTable>) {
+      g_file
+          << "# a  b  c  d  g_abcd    ## (nb: abcd = badc = cdab = dcba; only "
+             "'smallest' is written)\n";
+    } else {
+      g_file << "# a  b  c  d  s_abcd    ## (nb: abcd = badc; only "
+                "'smallest' is written)\n";
+    }
+  }
+
+  // two particle part
   for (const auto &a : ci_sp_basis) {
     for (const auto &b : ci_sp_basis) {
       for (const auto &c : ci_sp_basis) {
@@ -77,6 +93,7 @@ void write_CoulombIntegrals(const std::string &fname,
           const auto [k0, k1] = std::is_same_v<Integrals, Coulomb::QkTable> ?
                                     Coulomb::k_minmax_Q(a, b, c, d) :
                                     MBPT::k_minmax_S(a, b, c, d);
+          // essentially J triangle rule (and parity)
           if (k1 < k0)
             continue;
 
@@ -98,9 +115,23 @@ void write_CoulombIntegrals(const std::string &fname,
                   const auto id =
                       (uint16_t)orbital_map.at(nkm{d.n(), d.kappa(), tmd});
 
+                  // Is this correct?
+                  if (ci_dump_format) {
+                    // ma+mb=Jz=J
+                    if (tma + tmb != twoJ)
+                      continue;
+                    // parity
+                    if (a.parity() * b.parity() != parity)
+                      continue;
+                    if (c.parity() * d.parity() != parity)
+                      continue;
+                    // Pauli
+                    if (ia == ib || ic == id)
+                      continue;
+                  }
+
                   // Equivilant integrals:
-                  // abcd = badc = cdab = dcba for g
-                  // abcd = badc               for s
+                  // Convert four indevidual idex's to single index:
                   // nb: this only works if largest of (ia,ib,ic,id)
                   // is smaller than 2^16, which is always true
                   const auto indexify = [](uint16_t w, uint16_t x, uint16_t y,
@@ -108,6 +139,8 @@ void write_CoulombIntegrals(const std::string &fname,
                     return ((uint64_t)w << 48) + ((uint64_t)x << 32) +
                            ((uint64_t)y << 16) + (uint64_t)z;
                   };
+                  // abcd = badc = cdab = dcba for g
+                  // abcd = badc               for s
                   uint64_t i1 = indexify(ia, ib, ic, id);
                   uint64_t i2 = indexify(ib, ia, id, ic);
                   uint64_t i3 = indexify(ic, id, ia, ib);
@@ -125,16 +158,47 @@ void write_CoulombIntegrals(const std::string &fname,
                   }
 
                   const auto g = qk.g(a, b, c, d, tma, tmb, tmc, tmd);
-                  // Note sure why zero values slip through?
-                  // Missing SR? or mistake?
                   if (g == 0.0)
                     continue;
 
-                  fmt::print(g_file, "{} {} {} {} {:.8e}\n", ia, ib, ic, id, g);
+                  if (ci_dump_format) {
+                    // note: b and c interchanged, and start from 1
+                    fmt::print(g_file, "{:.8e} {} {} {} {}\n", g, ia + 1,
+                               ic + 1, ib + 1, id + 1);
+                  } else {
+                    fmt::print(g_file, "{} {} {} {} {:.8e}\n", ia + 1, ib + 1,
+                               ic + 1, id + 1, g);
+                  }
                 }
               }
             }
           }
+        }
+      }
+    }
+  }
+
+  // one-particle part:
+  if (ci_dump_format) {
+    for (const auto &a : ci_sp_basis) {
+      for (const auto &b : ci_sp_basis) {
+        // h1 is scalar operator, so kappa's must be equal!
+        if (b.kappa() != a.kappa())
+          continue;
+        for (int twom = -a.twoj(); twom <= a.twoj(); twom += 2) {
+          // m_a = m_b (scalar operator)
+
+          const auto index_a = orbital_map.at(nkm{a.n(), a.kappa(), twom});
+          const auto index_b = orbital_map.at(nkm{a.n(), a.kappa(), twom});
+          // symmetric; only store 'smallest' index set:
+          if (index_b < index_a)
+            continue;
+
+          const auto value = h1.getv(a, b);
+          if (value == 0.0)
+            continue;
+          fmt::print(g_file, "{:.8e} {} {} {} {}\n", value, index_a + 1,
+                     index_b + 1, 0, 0);
         }
       }
     }

@@ -30,10 +30,10 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
       {{"ci_basis",
         "Basis used for CI expansion; must be a sub-set of full ampsci basis "
         "[default: 10spdf]"},
-       {"J", "List of total angular momentum J for CI solutions (comma "
-             "separated). Must be integers (two-electron only). [0]"},
-       {"J+", "As above, but for EVEN CSFs only (takes precedence over J)."},
-       {"J-", "As above, but for ODD CSFs (takes precedence over J)."},
+       {"J+",
+        "List of total angular momentum J for even-parity CI solutions (comma "
+        "separated). Must be integers (two-electron only)."},
+       {"J-", "As above, but for ODD solutions."},
        {"num_solutions", "Number of CI solutions to find (for each J/pi) [5]"},
        {"sigma1", "Include one-body MBPT correlations? [false]"},
        {"sigma2", "Include two-body MBPT correlations? [false]"},
@@ -93,8 +93,8 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
     for (const auto &Fn : ci_sp_basis) {
       for (int twom = -Fn.twoj(); twom <= Fn.twoj(); twom += 2) {
 
-        fmt::print(of, "{} {} {} {} {}/2\n", index, Fn.shortSymbol(), Fn.n(),
-                   Fn.kappa(), twom);
+        fmt::print(of, "{} {} {} {} {}/2\n", index + 1, Fn.shortSymbol(),
+                   Fn.n(), Fn.kappa(), twom);
         orbital_map.insert({{Fn.n(), Fn.kappa(), twom}, index});
         ++index;
       }
@@ -282,7 +282,8 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
           //should never happen:
           if (value == 0.0)
             continue;
-          fmt::print(h1_file, "{} {} {:.8e}\n", index_a, index_b, value);
+          fmt::print(h1_file, "{} {} {:.8e}\n", index_a + 1, index_b + 1,
+                     value);
         }
       }
     }
@@ -335,9 +336,8 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 
   //----------------------------------------------------------------------------
-  const auto J_list = input.get("J", std::vector<int>{});
-  const auto J_even_list = input.get("J+", J_list);
-  const auto J_odd_list = input.get("J-", J_list);
+  const auto J_even_list = input.get("J+", std::vector<int>{});
+  const auto J_odd_list = input.get("J-", std::vector<int>{});
   const auto num_solutions = input.get("num_solutions", 5);
 
   //----------------------------------------------------------------------------
@@ -356,6 +356,13 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
                                         CI::construct_Hci(psi, h1, qk);
       write_H(Hci, csf_file);
       std::cout << "\n";
+
+      // Write out in CI_dump format
+      std::string fci_file = wf.atomicSymbol() + "_FCIdump_" +
+                             DiracSpinor::state_config(ci_sp_basis) + "_" +
+                             std::to_string(J) + "+_" + ".txt";
+      write_CoulombIntegrals(fci_file, ci_sp_basis, orbital_map, qk, true, h1,
+                             2 * J, +1);
     }
     for (const auto J : J_odd_list) {
       CI::PsiJPi psi{2 * J, -1, ci_sp_basis};
@@ -370,6 +377,13 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
                                         CI::construct_Hci(psi, h1, qk);
       write_H(Hci, csf_file);
       std::cout << "\n";
+
+      // Write out in CI_dump format
+      std::string fci_file = wf.atomicSymbol() + "_FCIdump_" +
+                             DiracSpinor::state_config(ci_sp_basis) + "_" +
+                             std::to_string(J) + "-_" + ".txt";
+      write_CoulombIntegrals(fci_file, ci_sp_basis, orbital_map, qk, true, h1,
+                             2 * J, -1);
     }
   }
 
@@ -411,8 +425,6 @@ void write_CSFs(const std::vector<CI::CSF2> &CSFs, int twoJ,
                 const std::map<nkm, int> &orbital_map,
                 const std::string &csf_fname) {
 
-  std::cout << "Writing CSFs and projections to files: {csf/proj}-" << csf_fname
-            << "\n";
   std::ofstream csf_file(csf_fname + "_csf.txt");
   std::ofstream proj_file(csf_fname + "_proj.txt");
 
@@ -431,7 +443,7 @@ void write_CSFs(const std::vector<CI::CSF2> &CSFs, int twoJ,
     const auto tjv = Angular::twoj_k(kv);
     const auto tjw = Angular::twoj_k(kw);
 
-    fmt::print(csf_file, "{} {} {}\n", csf_count,
+    fmt::print(csf_file, "{} {} {}\n", csf_count + 1,
                DiracSpinor::shortSymbol(nv, kv),
                DiracSpinor::shortSymbol(nw, kw));
     ++csf_count;
@@ -439,28 +451,29 @@ void write_CSFs(const std::vector<CI::CSF2> &CSFs, int twoJ,
     // Each individual m projection:
     for (int two_m_v = -tjv; two_m_v <= tjv; two_m_v += 2) {
       const auto two_m_w = twoJ - two_m_v;
-      if (std::abs(two_m_w) > tjw)
-        continue;
+      // if (std::abs(two_m_w) > tjw)
+      //   continue;
       const auto cgc = Angular::cg_2(tjv, two_m_v, tjw, two_m_w, twoJ, twoJ);
       if (cgc == 0.0)
         continue;
 
       const auto iv = orbital_map.at(nkm{nv, kv, two_m_v});
       const auto iw = orbital_map.at(nkm{nw, kw, two_m_w});
-      if (iw > iv)
-        continue;
+      // if (iw > iv)
+      //   continue;
 
-      const auto eta = v == w ? 1 / std::sqrt(2.0) : 1.0;
+      const auto eta = v == w ? 1.0 / std::sqrt(2.0) : 1.0;
       const auto d_proj = eta * cgc; //?
 
-      fmt::print(proj_file, "{} {} {} {:.8f}\n", proj_count, iv, iw, d_proj);
+      fmt::print(proj_file, "{} {} {} {:.8f}\n", proj_count + 1, iv + 1, iw + 1,
+                 d_proj);
       ++proj_count;
     }
   }
   std::cout << "Writing " << csf_count
             << " CSFs to file: " << (csf_fname + "_csf.txt") << "\n";
   std::cout << "Writing " << proj_count
-            << " projections to file: " << (csf_fname + "_csf.txt") << "\n";
+            << " projections to file: " << (csf_fname + "_proj.txt") << "\n";
 }
 
 //==============================================================================
