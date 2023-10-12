@@ -52,8 +52,7 @@ void write_CoulombIntegrals(const std::string &fname,
                             const std::vector<DiracSpinor> &ci_sp_basis,
                             const std::map<nkm, int> &orbital_map,
                             const Integrals &qk, bool ci_dump_format = false,
-                            const Coulomb::meTable<double> &h1 = {},
-                            int twoJ = 0, int parity = 0) {
+                            const Coulomb::meTable<double> &h1 = {}) {
 
   static_assert(std::is_same_v<Integrals, Coulomb::QkTable> ||
                 std::is_same_v<Integrals, Coulomb::LkTable>);
@@ -71,11 +70,16 @@ void write_CoulombIntegrals(const std::string &fname,
     fmt::print(
         g_file,
         //  "&FCI\n  NORB={},\n  NELEC=2,\n  MJ2={},\n  PI={},\n  &END\n",
-        "&FCI\n  NORB={},\n  NELEC=2,\n  MJ2={},\n  PI={},\n  ORBMJ2=", n_orb,
-        twoJ, parity);
+        "&FCI\n  NORB={},\n  NELEC=2,\n  ORBMJ2=", n_orb);
     for (const auto &a : ci_sp_basis) {
       for (int tma = -a.twoj(); tma <= a.twoj(); tma += 2) {
         g_file << tma << ",";
+      }
+    }
+    g_file << "\n  ORBPI=";
+    for (const auto &a : ci_sp_basis) {
+      for (int tma = -a.twoj(); tma <= a.twoj(); tma += 2) {
+        g_file << a.parity() << ",";
       }
     }
     g_file << "\n&END\n";
@@ -110,8 +114,8 @@ void write_CoulombIntegrals(const std::string &fname,
                 for (int tmd = -d.twoj(); tmd <= d.twoj(); tmd += 2) {
 
                   // m = j_z selection rules:
-                  if (tmc - tma != tmb - tmd)
-                    continue;
+                  // if (tmc - tma != tmb - tmd)
+                  //   continue;
 
                   const auto ia =
                       (uint16_t)orbital_map.at(nkm{a.n(), a.kappa(), tma});
@@ -123,20 +127,13 @@ void write_CoulombIntegrals(const std::string &fname,
                       (uint16_t)orbital_map.at(nkm{d.n(), d.kappa(), tmd});
 
                   // Is this correct?
-                  if (ci_dump_format) {
-                    // ma+mb=Jz=J
-                    if (tma + tmb != twoJ)
-                      continue;
-                    // parity
-                    if (a.parity() * b.parity() != parity)
-                      continue;
-                    if (c.parity() * d.parity() != parity)
-                      continue;
-                    // Pauli
-                    if (ia == ib || ic == id)
-                      continue;
-                  }
+                  // if (ci_dump_format) {
+                  //   // Pauli
+                  //   if (ia == ib || ic == id)
+                  //     continue;
+                  // }
 
+                  /*
                   // Equivilant integrals:
                   // Convert four indevidual idex's to single index:
                   // nb: this only works if largest of (ia,ib,ic,id)
@@ -163,6 +160,7 @@ void write_CoulombIntegrals(const std::string &fname,
                     if (i1 != std::min({i1, i2}))
                       continue;
                   }
+                  */
 
                   const auto g = qk.g(a, b, c, d, tma, tmb, tmc, tmd);
                   if (g == 0.0)
@@ -170,7 +168,7 @@ void write_CoulombIntegrals(const std::string &fname,
 
                   if (ci_dump_format) {
                     // note: b and c interchanged, and start from 1
-                    fmt::print(g_file, "{:.8e} {} {} {} {}\n", g, ia + 1,
+                    fmt::print(g_file, "{:.16e} {} {} {} {}\n", g, ia + 1,
                                ic + 1, ib + 1, id + 1);
                   } else {
                     fmt::print(g_file, "{} {} {} {} {:.8e}\n", ia + 1, ib + 1,
@@ -204,7 +202,7 @@ void write_CoulombIntegrals(const std::string &fname,
           const auto value = h1.getv(a, b);
           if (value == 0.0)
             continue;
-          fmt::print(g_file, "{:.8e} {} {} {} {}\n", value, index_a + 1,
+          fmt::print(g_file, "{:.16e} {} {} {} {}\n", value, index_a + 1,
                      index_b + 1, 0, 0);
         }
       }

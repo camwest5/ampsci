@@ -342,6 +342,12 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
 
   //----------------------------------------------------------------------------
   if (write_integrals) {
+
+    // Write out in CI_dump format
+    std::string fci_file = wf.atomicSymbol() + "_FCIdump_" +
+                           DiracSpinor::state_config(ci_sp_basis) + ".txt";
+    write_CoulombIntegrals(fci_file, ci_sp_basis, orbital_map, qk, true, h1);
+
     // Print CSFs:
     std::cout << "\n";
     for (const auto J : J_even_list) {
@@ -358,11 +364,11 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
       std::cout << "\n";
 
       // Write out in CI_dump format
-      std::string fci_file = wf.atomicSymbol() + "_FCIdump_" +
-                             DiracSpinor::state_config(ci_sp_basis) + "_" +
-                             std::to_string(J) + "+_" + ".txt";
-      write_CoulombIntegrals(fci_file, ci_sp_basis, orbital_map, qk, true, h1,
-                             2 * J, +1);
+      // std::string fci_file = wf.atomicSymbol() + "_FCIdump_" +
+      //                        DiracSpinor::state_config(ci_sp_basis) + "_" +
+      //                        std::to_string(J) + "+_" + ".txt";
+      // write_CoulombIntegrals(fci_file, ci_sp_basis, orbital_map, qk, true, h1,
+      //                        2 * J, +1);
     }
     for (const auto J : J_odd_list) {
       CI::PsiJPi psi{2 * J, -1, ci_sp_basis};
@@ -379,11 +385,11 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
       std::cout << "\n";
 
       // Write out in CI_dump format
-      std::string fci_file = wf.atomicSymbol() + "_FCIdump_" +
-                             DiracSpinor::state_config(ci_sp_basis) + "_" +
-                             std::to_string(J) + "-_" + ".txt";
-      write_CoulombIntegrals(fci_file, ci_sp_basis, orbital_map, qk, true, h1,
-                             2 * J, -1);
+      // std::string fci_file = wf.atomicSymbol() + "_FCIdump_" +
+      //                        DiracSpinor::state_config(ci_sp_basis) + "_" +
+      //                        std::to_string(J) + "-_" + ".txt";
+      // write_CoulombIntegrals(fci_file, ci_sp_basis, orbital_map, qk, true, h1,
+      //                        2 * J, -1);
     }
   }
 
@@ -414,7 +420,7 @@ void write_H(const LinAlg::Matrix<double> &Hci, const std::string &csf_fname) {
   ci_file << "# in matrix/table form: \n";
   for (std::size_t iA = 0; iA < Hci.rows(); ++iA) {
     for (std::size_t iX = 0; iX < Hci.cols(); ++iX) {
-      fmt::print(ci_file, "{:+.6e} ", Hci(iA, iX));
+      fmt::print(ci_file, "{:+.16e} ", Hci(iA, iX));
     }
     ci_file << "\n";
   }
