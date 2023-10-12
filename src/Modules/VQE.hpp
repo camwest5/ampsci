@@ -70,8 +70,15 @@ void write_CoulombIntegrals(const std::string &fname,
     // I don't know what these all really mean...
     fmt::print(
         g_file,
-        "&FCI\n  NORB={},\n  NELEC=2,\n  MJ2={},\n  PI={},\n  ISYM=1,\n&END\n",
-        n_orb, twoJ, parity);
+        //  "&FCI\n  NORB={},\n  NELEC=2,\n  MJ2={},\n  PI={},\n  &END\n",
+        "&FCI\n  NORB={},\n  NELEC=2,\n  MJ2={},\n  PI={},\n  ORBMJ2=", n_orb,
+        twoJ, parity);
+    for (const auto &a : ci_sp_basis) {
+      for (int tma = -a.twoj(); tma <= a.twoj(); tma += 2) {
+        g_file << tma << ",";
+      }
+    }
+    g_file << "\n&END\n";
   } else {
     if (std::is_same_v<Integrals, Coulomb::QkTable>) {
       g_file
@@ -202,6 +209,7 @@ void write_CoulombIntegrals(const std::string &fname,
         }
       }
     }
+    g_file << "0.0 0 0 0 0\n";
   }
 }
 
