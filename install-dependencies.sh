@@ -33,8 +33,12 @@ if [ ${machine} == 'Linux' ]; then
   fi
   set -x
   apt-get update &&
+<<<<<<< HEAD
   apt-get install --yes make g++ liblapack-dev libblas-dev libgsl-dev libomp-dev &&
   make
+=======
+  apt-get install --yes make g++ liblapack-dev libblas-dev libgsl-dev libomp-dev
+>>>>>>> CI
 elif [ ${machine} == 'Mac' ]; then
   # check if homebrew is installed:
   which -s brew
@@ -53,7 +57,11 @@ elif [ ${machine} == 'Mac' ]; then
   fi
   set -x
   brew install gcc@12 &&
+<<<<<<< HEAD
   brew install gsl &&
+=======
+  brew install gsl
+>>>>>>> CI
 else
   echo 'Unsupported system for setup - requires manual setup'
   exit

@@ -133,34 +133,34 @@ void write_CoulombIntegrals(const std::string &fname,
                   //     continue;
                   // }
 
-                  /*
-                  // Equivilant integrals:
-                  // Convert four indevidual idex's to single index:
-                  // nb: this only works if largest of (ia,ib,ic,id)
-                  // is smaller than 2^16, which is always true
-                  const auto indexify = [](uint16_t w, uint16_t x, uint16_t y,
-                                           uint16_t z) {
-                    return ((uint64_t)w << 48) + ((uint64_t)x << 32) +
-                           ((uint64_t)y << 16) + (uint64_t)z;
-                  };
-                  // abcd = badc = cdab = dcba for g
-                  // abcd = badc               for s
-                  uint64_t i1 = indexify(ia, ib, ic, id);
-                  uint64_t i2 = indexify(ib, ia, id, ic);
-                  uint64_t i3 = indexify(ic, id, ia, ib);
-                  uint64_t i4 = indexify(id, ic, ib, ia);
+                  if (!ci_dump_format) {
+                    // Equivilant integrals:
+                    // Convert four indevidual idex's to single index:
+                    // nb: this only works if largest of (ia,ib,ic,id)
+                    // is smaller than 2^16, which is always true
+                    const auto indexify = [](uint16_t w, uint16_t x, uint16_t y,
+                                             uint16_t z) {
+                      return ((uint64_t)w << 48) + ((uint64_t)x << 32) +
+                             ((uint64_t)y << 16) + (uint64_t)z;
+                    };
+                    // abcd = badc = cdab = dcba for g
+                    // abcd = badc               for s
+                    uint64_t i1 = indexify(ia, ib, ic, id);
+                    uint64_t i2 = indexify(ib, ia, id, ic);
+                    uint64_t i3 = indexify(ic, id, ia, ib);
+                    uint64_t i4 = indexify(id, ic, ib, ia);
 
-                  // Only include the unique ones:
-                  if (std::is_same_v<Integrals, Coulomb::QkTable>) {
-                    // g symmetry
-                    if (i1 != std::min({i1, i2, i3, i4}))
-                      continue;
-                  } else {
-                    // s symmetry
-                    if (i1 != std::min({i1, i2}))
-                      continue;
+                    // Only include the unique ones:
+                    if (std::is_same_v<Integrals, Coulomb::QkTable>) {
+                      // g symmetry
+                      if (i1 != std::min({i1, i2, i3, i4}))
+                        continue;
+                    } else {
+                      // s symmetry
+                      if (i1 != std::min({i1, i2}))
+                        continue;
+                    }
                   }
-                  */
 
                   const auto g = qk.g(a, b, c, d, tma, tmb, tmc, tmd);
                   if (g == 0.0)
