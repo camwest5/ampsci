@@ -17,7 +17,7 @@
 
 namespace Module {
 
-using nkIndex = DiracSpinor::Index;
+using nkIndex = DiracSpinor::Index; // 16 bit unsignd int; unique {n,kappa}->i
 
 //==============================================================================
 //==============================================================================
@@ -35,6 +35,11 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
         "separated). Must be integers (two-electron only)."},
        {"J-", "As above, but for ODD solutions."},
        {"num_solutions", "Number of CI solutions to find (for each J/pi) [5]"},
+       {"write_integrals",
+        "Writes orbitals, CSFs, CI matrix, and 1 and 2 particle "
+        "integrals to plain text file [true]"},
+       {"symmetries",
+        "Account for symmetries when writing FCI_dump file [false]"},
        {"sigma1", "Include one-body MBPT correlations? [false]"},
        {"sigma2", "Include two-body MBPT correlations? [false]"},
        {"cis2_basis",
@@ -55,10 +60,7 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
         "Maximum k (multipolarity) to include when calculating new "
         "Coulomb integrals. Higher k often contribute negligably. Note: if qk "
         "file already has higher-k terms, they will be included. Set negative "
-        "(or very large) to include all k. [6]"},
-       {"write_integrals",
-        "Writes orbitals, CSFs, CI matrix, and 1 and 2 particle "
-        "integrals to plain text file [true]"}});
+        "(or very large) to include all k. [6]"}});
   // If we are just requesting 'help', don't run module:
   if (input.has_option("help")) {
     return;
@@ -152,19 +154,13 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
                 << " in Coulomb integrals (unless already calculated)\n";
     }
     if (include_Sigma1) {
-      // if (wf.Sigma()) {
-      //   std::cout << "With existing Correlation Potential for Σ_1:\n";
-      //   wf.Sigma()->print_info();
-      // } else
-      {
-        std::cout << "With basis for Σ_1: "
-                  << DiracSpinor::state_config(s1_basis) << "\n";
-      }
+
+      std::cout << "With basis for Σ_1: " << DiracSpinor::state_config(s1_basis)
+                << "\n";
     }
     if (include_Sigma2) {
       std::cout << "With basis for Σ_2: " << DiracSpinor::state_config(s2_basis)
                 << "\n";
-
       std::cout << "Including Σ_2 correction to Coulomb integrals up to: "
                 << DiracSpinor::state_config(cis2_basis) << "\n";
     }
@@ -246,61 +242,8 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
   //----------------------------------------------------------------------------
 
   // Create lookup table for one-particle matrix elements, h1
-  const auto h1 =
-      /* 
-          wf.Sigma() ?
-          CI::calculate_h1_table(ci_sp_basis, *wf.Sigma(), include_Sigma1) :
-     */
-      CI::calculate_h1_table(ci_sp_basis, core_s1, excited_s1, qk,
-                             include_Sigma1);
-
-  //----------------------------------------------------------------------------
-
-  // print all single-body integrals to file:
-  std::string one_file = wf.atomicSymbol() + "_h1_" +
-                         DiracSpinor::state_config(ci_sp_basis) + ".txt";
-  if (write_integrals) {
-    std::cout << "Writing one-particle (h1) integrals to file: " << one_file
-              << "\n";
-    std::ofstream h1_file(one_file);
-    h1_file << "# a  b  h1_ab   ## (h1_ab = h1_ba)\n";
-    for (const auto &a : ci_sp_basis) {
-      for (const auto &b : ci_sp_basis) {
-        // h1 is scalar operator, so kappa's must be equal!
-        if (b.kappa() != a.kappa())
-          continue;
-        for (int twom = -a.twoj(); twom <= a.twoj(); twom += 2) {
-          // m_a = m_b (scalar operator)
-
-          const auto index_a = orbital_map[nkm{a.n(), a.kappa(), twom}];
-          const auto index_b = orbital_map[nkm{a.n(), a.kappa(), twom}];
-          // symmetric; only store 'smallest' index set:
-          if (index_b < index_a)
-            continue;
-
-          const auto value = h1.getv(a, b);
-          //should never happen:
-          if (value == 0.0)
-            continue;
-          fmt::print(h1_file, "{} {} {:.8e}\n", index_a + 1, index_b + 1,
-                     value);
-        }
-      }
-    }
-  }
-
-  //----------------------------------------------------------------------------
-
-  // Writes g integrals to text file
-  // Modify this to include Sigma_2!
-  if (write_integrals) {
-    std::string g_file = wf.atomicSymbol() + "_h2_" +
-                         DiracSpinor::state_config(ci_sp_basis) + ".txt";
-
-    std::cout << "Writing two-particle (h2 = g_vwxy) integrals to file: "
-              << g_file << "\n";
-    write_CoulombIntegrals(g_file, ci_sp_basis, orbital_map, qk);
-  }
+  const auto h1 = CI::calculate_h1_table(ci_sp_basis, core_s1, excited_s1, qk,
+                                         include_Sigma1);
 
   //----------------------------------------------------------------------------
   // Calculate MBPT corrections to two-body Coulomb integrals
@@ -325,16 +268,6 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
     std::cout << "\n" << std::flush;
   }
 
-  if (include_Sigma2 && write_integrals) {
-    std::string s_file = wf.atomicSymbol() + "_s2_" +
-                         DiracSpinor::state_config(cis2_basis) + ".txt";
-
-    std::cout << "Writing two-particle correlation corrections (s2 = S_vwxy) "
-                 "integrals to file: "
-              << s_file << "\n";
-    write_CoulombIntegrals(s_file, cis2_basis, orbital_map, Sk);
-  }
-
   //----------------------------------------------------------------------------
   const auto J_even_list = input.get("J+", std::vector<int>{});
   const auto J_odd_list = input.get("J-", std::vector<int>{});
@@ -343,12 +276,20 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
   //----------------------------------------------------------------------------
   if (write_integrals) {
 
-    // Write out in CI_dump format
+    const auto suffix = include_Sigma1 && include_Sigma2 ? "_s12" :
+                        include_Sigma1                   ? "_s1" :
+                        include_Sigma2                   ? "_s2" :
+                                                           "";
     std::string fci_file = wf.atomicSymbol() + "_FCIdump_" +
-                           DiracSpinor::state_config(ci_sp_basis) + ".txt";
-    write_CoulombIntegrals(fci_file, ci_sp_basis, orbital_map, qk, true, h1);
+                           DiracSpinor::state_config(ci_sp_basis) + suffix +
+                           ".txt";
+    const bool symmetries_in_CIdump = input.get("symmetries", false);
 
-    // Print CSFs:
+    // Write out in CI_dump format
+    write_FCI_dump(fci_file, ci_sp_basis, orbital_map, qk, h1,
+                   symmetries_in_CIdump, include_Sigma2 ? &Sk : nullptr);
+
+    // Print CSFs and Hamiltonian (CI) matrix:
     std::cout << "\n";
     for (const auto J : J_even_list) {
       CI::PsiJPi psi{2 * J, +1, ci_sp_basis};
@@ -362,13 +303,6 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
                                         CI::construct_Hci(psi, h1, qk);
       write_H(Hci, csf_file);
       std::cout << "\n";
-
-      // Write out in CI_dump format
-      // std::string fci_file = wf.atomicSymbol() + "_FCIdump_" +
-      //                        DiracSpinor::state_config(ci_sp_basis) + "_" +
-      //                        std::to_string(J) + "+_" + ".txt";
-      // write_CoulombIntegrals(fci_file, ci_sp_basis, orbital_map, qk, true, h1,
-      //                        2 * J, +1);
     }
     for (const auto J : J_odd_list) {
       CI::PsiJPi psi{2 * J, -1, ci_sp_basis};
@@ -383,13 +317,6 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
                                         CI::construct_Hci(psi, h1, qk);
       write_H(Hci, csf_file);
       std::cout << "\n";
-
-      // Write out in CI_dump format
-      // std::string fci_file = wf.atomicSymbol() + "_FCIdump_" +
-      //                        DiracSpinor::state_config(ci_sp_basis) + "_" +
-      //                        std::to_string(J) + "-_" + ".txt";
-      // write_CoulombIntegrals(fci_file, ci_sp_basis, orbital_map, qk, true, h1,
-      //                        2 * J, -1);
     }
   }
 
@@ -483,5 +410,150 @@ void write_CSFs(const std::vector<CI::CSF2> &CSFs, int twoJ,
 }
 
 //==============================================================================
+
+//==============================================================================
+void write_FCI_dump(const std::string &fname,
+                    const std::vector<DiracSpinor> &ci_sp_basis,
+                    const std::map<nkm, int> &orbital_map,
+                    const Coulomb::QkTable &qk,
+                    const Coulomb::meTable<double> &h1, bool symmetries,
+                    const Coulomb::LkTable *Sk) {
+
+  // count the orbitals (including m projections)
+  int n_orb = 0;
+  for (const auto &a : ci_sp_basis) {
+    n_orb += a.twojp1();
+  }
+
+  // print all two-particle integrals Rk to file:
+  std::ofstream g_file(fname);
+
+  // CIDump format header:
+  fmt::print(g_file, "&FCI\n  NORB={},\n  NELEC=2,", n_orb);
+  g_file << "\n  ORBMJ2=";
+  for (const auto &a : ci_sp_basis) {
+    for (int tma = -a.twoj(); tma <= a.twoj(); tma += 2) {
+      g_file << tma << ",";
+    }
+  }
+  g_file << "\n  ORBPI=";
+  for (const auto &a : ci_sp_basis) {
+    for (int tma = -a.twoj(); tma <= a.twoj(); tma += 2) {
+      g_file << a.parity() << ",";
+    }
+  }
+  g_file << "\n  ORBJ2=";
+  for (const auto &a : ci_sp_basis) {
+    for (int tma = -a.twoj(); tma <= a.twoj(); tma += 2) {
+      g_file << a.twoj() << ",";
+    }
+  }
+  g_file << "\n&END\n";
+
+  // two particle part
+  for (const auto &a : ci_sp_basis) {
+    for (const auto &b : ci_sp_basis) {
+      for (const auto &c : ci_sp_basis) {
+        for (const auto &d : ci_sp_basis) {
+
+          // Selection rules, for g/s (not required)
+          const auto [k0, k1] = Sk == nullptr ?
+                                    Coulomb::k_minmax_Q(a, b, c, d) :
+                                    MBPT::k_minmax_S(a, b, c, d);
+          if (k1 < k0)
+            continue;
+
+          for (int tma = -a.twoj(); tma <= a.twoj(); tma += 2) {
+            for (int tmb = -b.twoj(); tmb <= b.twoj(); tmb += 2) {
+              for (int tmc = -c.twoj(); tmc <= c.twoj(); tmc += 2) {
+                for (int tmd = -d.twoj(); tmd <= d.twoj(); tmd += 2) {
+
+                  const auto ia =
+                      (uint16_t)orbital_map.at(nkm{a.n(), a.kappa(), tma});
+                  const auto ib =
+                      (uint16_t)orbital_map.at(nkm{b.n(), b.kappa(), tmb});
+                  const auto ic =
+                      (uint16_t)orbital_map.at(nkm{c.n(), c.kappa(), tmc});
+                  const auto id =
+                      (uint16_t)orbital_map.at(nkm{d.n(), d.kappa(), tmd});
+
+                  if (symmetries) {
+                    // Equivilant integrals:
+                    // Convert four indevidual idex's to single index:
+                    // nb: this only works if largest of (ia,ib,ic,id)
+                    // is smaller than 2^16, which is always true
+                    const auto indexify = [](uint16_t w, uint16_t x, uint16_t y,
+                                             uint16_t z) {
+                      return ((uint64_t)w << 48) + ((uint64_t)x << 32) +
+                             ((uint64_t)y << 16) + (uint64_t)z;
+                    };
+                    // abcd = badc = cdab = dcba for g
+                    // abcd = badc               for s
+                    const uint64_t i1 = indexify(ia, ib, ic, id);
+                    const uint64_t i2 = indexify(ib, ia, id, ic);
+                    const uint64_t i3 = indexify(ic, id, ia, ib);
+                    const uint64_t i4 = indexify(id, ic, ib, ia);
+
+                    // Only include the unique ones:
+                    if (Sk == nullptr) {
+                      // g symmetry
+                      if (i1 != std::min({i1, i2, i3, i4}))
+                        continue;
+                    } else {
+                      // s symmetry
+                      if (i1 != std::min({i1, i2}))
+                        continue;
+                    }
+                  }
+
+                  const auto g =
+                      qk.g(a, b, c, d, tma, tmb, tmc, tmd) +
+                      (Sk ? Sk->g(a, b, c, d, tma, tmb, tmc, tmd) : 0.0);
+
+                  if (g == 0.0)
+                    continue;
+
+                  // Note: "Chemist" notation:
+                  // b and c interchanged, and start from 1
+                  fmt::print(g_file, "{:.16e} {} {} {} {}\n", g, ia + 1, ic + 1,
+                             ib + 1, id + 1);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // one-particle part:
+  for (const auto &a : ci_sp_basis) {
+    for (const auto &b : ci_sp_basis) {
+      // h1 is scalar operator, so kappa's must be equal!
+      if (b.kappa() != a.kappa())
+        continue;
+      for (int twom = -a.twoj(); twom <= a.twoj(); twom += 2) {
+        // m_a = m_b (h is scalar operator)
+
+        const auto index_a = orbital_map.at(nkm{a.n(), a.kappa(), twom});
+        const auto index_b = orbital_map.at(nkm{a.n(), a.kappa(), twom});
+
+        // symmetric; only store 'smallest' index set:
+        if (symmetries) {
+          if (index_b < index_a)
+            continue;
+        }
+
+        const auto value = h1.getv(a, b);
+        if (value == 0.0)
+          continue;
+        fmt::print(g_file, "{:.16e} {} {} {} {}\n", value, index_a + 1,
+                   index_b + 1, 0, 0);
+      }
+    }
+  }
+  // nuclear repulsion
+  g_file << "0.0 0 0 0 0\n";
+}
 
 } // namespace Module
