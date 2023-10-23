@@ -1060,6 +1060,18 @@ DiracSpinor vexFa(const DiracSpinor &Fa, const std::vector<DiracSpinor> &core,
 }
 
 //==============================================================================
+std::vector<double> vdir(const std::vector<DiracSpinor> &core) {
+  using namespace qip::overloads;
+  std::vector<double> vdir(core.front().grid().num_points());
+  for (const auto &Fb : core) {
+    const double f_sf = Fb.twojp1() * Fb.occ_frac();
+    const auto v0bb = Coulomb::yk_ab(0, Fb, Fb, Fb.max_pt());
+    vdir += f_sf * v0bb;
+  }
+  return vdir;
+}
+
+//==============================================================================
 std::vector<double> HartreeFock::Hrad_el(int l) const {
   return m_vrad ? m_vrad->Vel(l) : std::vector<double>{};
 }

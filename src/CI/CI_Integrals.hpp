@@ -3,6 +3,7 @@
 #include "Coulomb/QkTable.hpp"
 #include "Coulomb/meTable.hpp"
 #include "LinAlg/Matrix.hpp"
+#include "Wavefunction/Wavefunction.hpp"
 #include <string>
 #include <vector>
 class DiracDiracSpinor;
@@ -42,6 +43,11 @@ calculate_h1_table(const std::vector<DiracSpinor> &ci_basis,
                    const Coulomb::QkTable &qk, bool include_Sigma1);
 
 Coulomb::meTable<double>
+calculate_h1_table_v2(const std::vector<DiracSpinor> &ci_basis,
+                      const Wavefunction &wf,
+                      const std::vector<DiracSpinor> &frozen_core);
+
+Coulomb::meTable<double>
 calculate_h1_table(const std::vector<DiracSpinor> &ci_basis,
                    const MBPT::CorrelationPotential &Sigma,
                    bool include_Sigma1);
@@ -60,6 +66,10 @@ std::vector<DiracSpinor>
 basis_subset(const std::vector<DiracSpinor> &basis,
              const std::string &subset_string,
              const std::string &frozen_core_string = "");
+
+std::vector<DiracSpinor>
+frozen_core_subset(const std::vector<DiracSpinor> &basis,
+                   const std::string &frozen_core_string);
 
 //! Calculate reduced matrix elements between two CI states.
 //! @details

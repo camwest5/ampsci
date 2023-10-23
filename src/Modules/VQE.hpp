@@ -52,6 +52,6 @@ void write_FCI_dump(const std::string &fname,
                     const Coulomb::QkTable &qk,
                     const Coulomb::meTable<double> &h1 = {},
                     bool symmetries = false,
-                    const Coulomb::LkTable *Sk = nullptr);
+                    const Coulomb::LkTable *Sk = nullptr, int n_elec = 2);
 
 } // namespace Module

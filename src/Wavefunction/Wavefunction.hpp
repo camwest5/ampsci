@@ -304,6 +304,7 @@ public:
 
   //! Returns <a|H|b> for Hamiltonian H (inludes Rad.pot, NOT sigma, Breit, or exchange!)
   double H0ab(const DiracSpinor &Fa, const DiracSpinor &Fb) const;
+  double H00ab(const DiracSpinor &Fa, const DiracSpinor &Fb) const;
   //! Returns <a|H|b> for Hamiltonian H (inludes Rad.pot, NOT sigma, Breit, or exchange!)
   double H0ab(const DiracSpinor &Fa, const DiracSpinor &dFa,
               const DiracSpinor &Fb, const DiracSpinor &dFb) const;
@@ -315,7 +316,8 @@ public:
 private:
   double H0ab_impl(const DiracSpinor &Fa, std::vector<double> dga,
                    const DiracSpinor &Fb, std::vector<double> dgb) const;
-
+  double H00ab_impl(const DiracSpinor &Fa, std::vector<double> dga,
+                    const DiracSpinor &Fb, std::vector<double> dgb) const;
   // Creates set of blank core orbitals
   std::vector<DiracSpinor> determineCore(const std::string &str_core_in);
   bool isInAboveFermiCore(int n, int k) const;

@@ -59,6 +59,8 @@ std::vector<double> vex_approx(const DiracSpinor &Fa,
 DiracSpinor vexFa(const DiracSpinor &Fa, const std::vector<DiracSpinor> &core,
                   int k_cut = 99);
 
+std::vector<double> vdir(const std::vector<DiracSpinor> &core);
+
 //==============================================================================
 //==============================================================================
 //==============================================================================

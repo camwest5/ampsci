@@ -30,6 +30,7 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
       {{"ci_basis",
         "Basis used for CI expansion; must be a sub-set of full ampsci basis "
         "[default: 10spdf]"},
+       {"frozen_core", "..."},
        {"J+",
         "List of total angular momentum J for even-parity CI solutions (comma "
         "separated). Must be integers (two-electron only)."},
@@ -75,10 +76,17 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
 
   // Determine the sub-set of basis to use in CI:
   const auto basis_string = input.get("ci_basis", std::string{"10spdf"});
+  const auto frozen_string = input.get("frozen_core", wf.coreConfiguration());
+
+  // std::cout << wf.coreConfiguration() << "\n";
+  // std::cout << wf.coreConfiguration() << "\n";
+  // std::cin.get();
 
   // Select from wf.basis() [MBPT basis], those which match input 'basis_string'
   const std::vector<DiracSpinor> ci_sp_basis =
-      CI::basis_subset(wf.basis(), basis_string, wf.coreConfiguration());
+      CI::basis_subset(wf.basis(), basis_string, frozen_string);
+
+  const auto frozen_core = CI::frozen_core_subset(wf.core(), frozen_string);
 
   // Print info re: basis to screen:
   std::cout << "\nUsing " << DiracSpinor::state_config(ci_sp_basis) << " = "
@@ -95,8 +103,8 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
     for (const auto &Fn : ci_sp_basis) {
       for (int twom = -Fn.twoj(); twom <= Fn.twoj(); twom += 2) {
 
-        fmt::print(of, "{} {} {} {} {}/2\n", index + 1, Fn.shortSymbol(),
-                   Fn.n(), Fn.kappa(), twom);
+        fmt::print(of, "{} {} {} {} {}/2  {}\n", index + 1, Fn.shortSymbol(),
+                   Fn.n(), Fn.kappa(), twom, Fn.en());
         orbital_map.insert({{Fn.n(), Fn.kappa(), twom}, index});
         ++index;
       }
@@ -104,6 +112,7 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
     std::cout << "( = " << index
               << " single-particle orbitals, including m projections)\n";
   }
+  // return;
 
   //----------------------------------------------------------------------------
 
@@ -242,8 +251,10 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
   //----------------------------------------------------------------------------
 
   // Create lookup table for one-particle matrix elements, h1
-  const auto h1 = CI::calculate_h1_table(ci_sp_basis, core_s1, excited_s1, qk,
-                                         include_Sigma1);
+  const auto h1 = frozen_string == wf.coreConfiguration() ?
+                      CI::calculate_h1_table(ci_sp_basis, core_s1, excited_s1,
+                                             qk, include_Sigma1) :
+                      CI::calculate_h1_table_v2(ci_sp_basis, wf, frozen_core);
 
   //----------------------------------------------------------------------------
   // Calculate MBPT corrections to two-body Coulomb integrals
@@ -285,9 +296,16 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
                            ".txt";
     const bool symmetries_in_CIdump = input.get("symmetries", false);
 
+    int n_elec = wf.Znuc();
+    for (auto &n : frozen_core) {
+      n_elec -= n.num_electrons();
+    }
+    std::cout << "Nelec = " << n_elec << "\n";
+
     // Write out in CI_dump format
     write_FCI_dump(fci_file, ci_sp_basis, orbital_map, qk, h1,
-                   symmetries_in_CIdump, include_Sigma2 ? &Sk : nullptr);
+                   symmetries_in_CIdump, include_Sigma2 ? &Sk : nullptr,
+                   n_elec);
 
     // Print CSFs and Hamiltonian (CI) matrix:
     std::cout << "\n";
@@ -417,7 +435,7 @@ void write_FCI_dump(const std::string &fname,
                     const std::map<nkm, int> &orbital_map,
                     const Coulomb::QkTable &qk,
                     const Coulomb::meTable<double> &h1, bool symmetries,
-                    const Coulomb::LkTable *Sk) {
+                    const Coulomb::LkTable *Sk, int n_elec) {
 
   // count the orbitals (including m projections)
   int n_orb = 0;
@@ -429,7 +447,7 @@ void write_FCI_dump(const std::string &fname,
   std::ofstream g_file(fname);
 
   // CIDump format header:
-  fmt::print(g_file, "&FCI\n  NORB={},\n  NELEC=2,", n_orb);
+  fmt::print(g_file, "&FCI\n  NORB={},\n  NELEC={},", n_orb, n_elec);
   g_file << "\n  ORBMJ2=";
   for (const auto &a : ci_sp_basis) {
     for (int tma = -a.twoj(); tma <= a.twoj(); tma += 2) {
@@ -442,12 +460,12 @@ void write_FCI_dump(const std::string &fname,
       g_file << a.parity() << ",";
     }
   }
-  g_file << "\n  ORBJ2=";
-  for (const auto &a : ci_sp_basis) {
-    for (int tma = -a.twoj(); tma <= a.twoj(); tma += 2) {
-      g_file << a.twoj() << ",";
-    }
-  }
+  // g_file << "\n  ORBJ2=";
+  // for (const auto &a : ci_sp_basis) {
+  //   for (int tma = -a.twoj(); tma <= a.twoj(); tma += 2) {
+  //     g_file << a.twoj() << ",";
+  //   }
+  // }
   g_file << "\n&END\n";
 
   // two particle part
@@ -536,7 +554,7 @@ void write_FCI_dump(const std::string &fname,
         // m_a = m_b (h is scalar operator)
 
         const auto index_a = orbital_map.at(nkm{a.n(), a.kappa(), twom});
-        const auto index_b = orbital_map.at(nkm{a.n(), a.kappa(), twom});
+        const auto index_b = orbital_map.at(nkm{b.n(), b.kappa(), twom});
 
         // symmetric; only store 'smallest' index set:
         if (symmetries) {

@@ -5,6 +5,7 @@
 #include "MBPT/CorrelationPotential.hpp"
 #include "MBPT/Sigma2.hpp"
 #include "Wavefunction/DiracSpinor.hpp"
+#include "Wavefunction/Wavefunction.hpp"
 #include <vector>
 
 namespace CI {
@@ -207,6 +208,39 @@ calculate_h1_table(const std::vector<DiracSpinor> &ci_basis,
 
 //==============================================================================
 Coulomb::meTable<double>
+calculate_h1_table_v2(const std::vector<DiracSpinor> &ci_basis,
+                      const Wavefunction &wf,
+                      const std::vector<DiracSpinor> &frozen_core) {
+  // Create lookup table for one-particle matrix elements, h1
+  Coulomb::meTable<double> h1;
+
+  using namespace qip::overloads;
+  const auto vd =
+      frozen_core.empty() ? std::vector<double>{} : HF::vdir(frozen_core);
+
+  // Calculate + store all 1-body integrals
+  for (const auto &v : ci_basis) {
+
+    for (const auto &w : ci_basis) {
+      if (w > v)
+        continue;
+      if (w.kappa() != v.kappa())
+        continue;
+
+      const auto h0_vw =
+          wf.H00ab(v, w) + v * (vd * w + HF::vexFa(w, frozen_core));
+
+      h1.add(v, w, h0_vw);
+      // Add symmetric partner:
+      if (v != w)
+        h1.add(w, v, h0_vw);
+    }
+  }
+  return h1;
+}
+
+//==============================================================================
+Coulomb::meTable<double>
 calculate_h1_table(const std::vector<DiracSpinor> &ci_basis,
                    const MBPT::CorrelationPotential &Sigma,
                    bool include_Sigma1) {
@@ -317,6 +351,32 @@ std::vector<DiracSpinor> basis_subset(const std::vector<DiracSpinor> &basis,
         });
 
     if (core != core_list.cend())
+      continue;
+    subset.push_back(a);
+  }
+  return subset;
+}
+
+std::vector<DiracSpinor>
+frozen_core_subset(const std::vector<DiracSpinor> &basis,
+                   const std::string &frozen_core_string) {
+
+  // Form 'subset' from {a} in 'basis', if:
+  //    a _is_ in subset_string AND
+  //    a _is not_ in basis string
+
+  std::vector<DiracSpinor> subset;
+  const auto core_list = AtomData::core_parser(frozen_core_string);
+
+  for (const auto &a : basis) {
+
+    // assume only filled shells in frozen core
+    const auto core = std::find_if(
+        core_list.cbegin(), core_list.cend(), [&a](const auto &tcore) {
+          return a.n() == tcore.n && a.l() == tcore.l;
+        });
+
+    if (core == core_list.cend())
       continue;
     subset.push_back(a);
   }
