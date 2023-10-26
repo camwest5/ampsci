@@ -83,8 +83,12 @@ void VQE(const IO::InputBlock &input, const Wavefunction &wf) {
   // std::cin.get();
 
   // Select from wf.basis() [MBPT basis], those which match input 'basis_string'
-  const std::vector<DiracSpinor> ci_sp_basis =
+  std::vector<DiracSpinor> ci_sp_basis_tmp =
       CI::basis_subset(wf.basis(), basis_string, frozen_string);
+
+  std::sort(ci_sp_basis_tmp.begin(), ci_sp_basis_tmp.end(),
+            [](auto &a, auto &b) { return a.en() < b.en(); });
+  const auto ci_sp_basis = ci_sp_basis_tmp;
 
   const auto frozen_core = CI::frozen_core_subset(wf.core(), frozen_string);
 
