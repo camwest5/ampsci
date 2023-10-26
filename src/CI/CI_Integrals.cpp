@@ -147,17 +147,17 @@ double Hab(const CI::CSF2 &X, const CI::CSF2 &V, int twoJ,
 
   const auto tjv = Angular::nkindex_to_twoj(v);
   const auto tjw = Angular::nkindex_to_twoj(w);
-  const auto s = X == V ? 1.0 : Angular::neg1pow_2(twoJ + tjv + tjw);
+  const auto s = Angular::neg1pow_2(twoJ + tjv + tjw);
 
   double h1_VX = 0.0;
   if (x == v) {
     h1_VX += eta2 * h1.getv(y, w);
   }
-  if (x == w) { // nb: extra sign
-    h1_VX += s * eta2 * h1.getv(y, v);
+  if (x == w) {
+    h1_VX -= s * eta2 * h1.getv(y, v);
   }
-  if (y == v) { // nb: extra sign
-    h1_VX += s * eta2 * h1.getv(x, w);
+  if (y == v) {
+    h1_VX -= s * eta2 * h1.getv(x, w);
   }
   if (y == w) {
     h1_VX += eta2 * h1.getv(x, v);
