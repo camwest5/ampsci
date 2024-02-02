@@ -5,6 +5,7 @@
 #include "Modules/Breit.hpp"
 #include "Modules/HFAnomaly.hpp"
 #include "Modules/VQE.hpp"
+#include "Modules/VarAlph.hpp"
 #include "Modules/basic.hpp"
 #include "Modules/exampleModule.hpp"
 #include "Modules/isotopeShift.hpp"
@@ -72,6 +73,7 @@ static const std::vector<ModuleInfo> module_list{
     {"pnc", &calculatePNC, "Calculates APV amplitudes"},
     {"muonPV", &muonPV, "For testing/playing with muonic PV"},
     {"VQE", &VQE, "For testing/playing with VQE method"},
+    {"VarAlph", &VarAlph, "For VarAlph (testing)"},
 
     {"exampleModule", &exampleModule, "A short description of the module"}};
 
