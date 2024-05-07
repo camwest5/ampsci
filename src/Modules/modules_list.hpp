@@ -6,6 +6,7 @@
 #include "Modules/HFAnomaly.hpp"
 #include "Modules/VQE.hpp"
 #include "Modules/basic.hpp"
+#include "Modules/dcp.hpp"
 #include "Modules/exampleModule.hpp"
 #include "Modules/isotopeShift.hpp"
 #include "Modules/ladder.hpp"
@@ -72,6 +73,7 @@ static const std::vector<ModuleInfo> module_list{
     {"pnc", &calculatePNC, "Calculates APV amplitudes"},
     {"muonPV", &muonPV, "For testing/playing with muonic PV"},
     {"VQE", &VQE, "For testing/playing with VQE method"},
+    {"dcp", &dcp, "dcp"},
 
     {"exampleModule", &exampleModule, "A short description of the module"}};
 
