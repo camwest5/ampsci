@@ -40,10 +40,10 @@ void dcp(const IO::InputBlock &input, const Wavefunction &wf) {
   auto alpha = 0.0;
   for (const auto &n : wf.basis()) {
 
-    const auto svn = s->reducedME(v, n) * s->rme3js(v.twoj(), n.twoj(), 1);
-    const auto tnw = t->reducedME(n, w) * t->rme3js(n.twoj(), w.twoj(), 1);
-    const auto tvn = t->reducedME(v, n) * t->rme3js(v.twoj(), n.twoj(), 1);
-    const auto snw = s->reducedME(n, w) * s->rme3js(n.twoj(), w.twoj(), 1);
+    const auto svn = s->fullME(v, n, {}, {}, 0);
+    const auto tnw = t->fullME(n, w, {}, {}, 0);
+    const auto tvn = t->fullME(v, n, {}, {}, 0);
+    const auto snw = s->fullME(n, w, {}, {}, 0);
 
     // careful!
     if (svn == 0.0)
