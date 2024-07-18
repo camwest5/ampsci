@@ -137,6 +137,7 @@ struct Option {
 class InputBlock {
 private:
   std::string m_name{};
+  std::string m_path{};
   std::vector<Option> m_options{};
   std::vector<InputBlock> m_blocks{};
 
@@ -155,9 +156,10 @@ public:
   }
 
   //! Construct from plain text file, in Block{option=value;} format
-  InputBlock(std::string_view name, const std::istream &file) : m_name(name) {
+  InputBlock(std::string_view name, std::string path, const std::istream &file) : m_name(name), m_path(path) {
     add(file_to_string(file));
   }
+
 
   //! Add a new InputBlock (merge: will be merged with existing if names
   //! match)
@@ -170,7 +172,9 @@ public:
   inline void add(const std::string &string, bool merge = false);
   inline void merge(const std::string &string) { add(string, true); }
 
+
   std::string_view name() const { return m_name; }
+  std::string path() const { return m_path; }
   //! Return const reference to list of options
   const std::vector<Option> &options() const { return m_options; }
   //! Return const reference to list of blocks
@@ -237,6 +241,9 @@ public:
     auto temp = getBlock(blocks, name);
     return temp != std::nullopt;
   }
+
+  //! Remove a block (non nested)
+  inline void remove_block(const std::string_view &name);
 
   //! Get an 'Option' (kay, value) - rarely needed
   inline std::optional<Option> getOption(std::string_view key) const;
@@ -456,6 +463,18 @@ InputBlock::getBlock(std::initializer_list<std::string> blocks,
 }
 
 //==============================================================================
+void InputBlock::remove_block(const std::string_view &name) {
+
+  int i = 0;
+  for (const auto &block : m_blocks) {
+    if (block.m_name == name) {
+      m_blocks.erase(m_blocks.begin() + i);
+    }
+    i++;
+  }
+}
+
+//==============================================================================
 std::optional<Option> InputBlock::getOption(std::string_view key) const {
   // Use reverse iterators so that we find _last_ option that matches key
   // i.e., assume later options override earlier ones.
@@ -662,6 +681,7 @@ void InputBlock::add_blocks_from_string(std::string_view string, bool merge) {
       // Add a new block, populate it with string. Recursive, since blocks may
       // contain blocks
       auto &block = m_blocks.emplace_back(block_name);
+      block.m_path = m_path;
 
       if (end > start)
         block.add_blocks_from_string(string.substr(start, end - start), merge);

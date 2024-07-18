@@ -33,7 +33,8 @@ void fieldShift(const IO::InputBlock &input, const Wavefunction &wf) {
             << wf.atom() << ", " << wf.nucleus() << "\n"
             << "By fitting de = F<dr^2> for small delta r\n";
 
-  wfB.copySigma(wf.Sigma());
+  wfB.copySigma(wf.Sigma()); // Not quite correct, as wfB's sigma should be determined 'from scratch'
+
   const auto core_string = wf.coreConfiguration();
   const auto val_string = DiracSpinor::state_config(wf.valence());
   const auto r0 = wf.get_rrms();
@@ -95,6 +96,132 @@ void fieldShift(const IO::InputBlock &input, const Wavefunction &wf) {
     std::cout << Fv.symbol() << " "
               << "F = " << c1 << " GHz/fm^2, sd = " << std::sqrt(sumsq) << "\n";
   }
+}
+
+void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
+  input.check(
+      {{"", "Determines isotope shift"},
+       {"print", "Print each step? [true]"},
+       {"min_pc", "Minimum percentage shift in r [1.0e-3]"},
+       {"max_pc", "Maximum percentage shift in r [1.0e-1]"},
+       {"num_steps", "Number of steps for derivative (for each sign)? [3]"}});
+  // If we are just requesting 'help', don't run module:
+  if (input.has_option("help")) {
+    return;
+  }
+
+
+  // Calculate field shift
+
+  const auto print = input.get("print", true);
+
+  const auto min_pc = input.get("min_pc", 1.0e-3);
+  const auto max_pc = input.get("max_pc", 1.0e-1);
+  const auto num_steps = input.get<unsigned long>("num_steps", 3);
+
+  // Run ampsci for second wavefunction with different isotope (otherwise same parameters)
+  
+  // Read original input file again, much like in main()
+
+  auto new_input = IO::InputBlock("ampsci", input.path(), std::fstream(input.path()));
+
+  std::string new_A = "Atom{A = 100;}";
+  new_input.add(new_A, true); 
+  // Currently just adds A = 100 without removing previous. OK because it reads the last,
+  // but would be safer to remove original
+
+  // Remove all modules
+  for (auto block : new_input.blocks()) {
+    auto name = block.name();
+
+    if (name.substr(0, 8) == "Module::") {
+      new_input.remove_block(name);
+    } 
+  }
+
+  // Create second wavefunction
+
+  /*
+  // Create second wavefunction
+  Wavefunction wf2(wf.grid_sptr(), wf.nucleus(),  wf.alpha() / PhysConst::alpha);
+
+  std::cout << "Calculating field shift corrections for \n"
+            << wf.atom() << ", " << wf.nucleus() << "\n"
+            << "By fitting de = F<dr^2> for small delta r\n";
+
+  wf2.copySigma(wf.Sigma()); // Not quite correct, as wfB's sigma should be determined 'from scratch'
+
+  const auto core_string = wf.coreConfiguration();
+  const auto val_string = DiracSpinor::state_config(wf.valence());
+  const auto r0 = wf.get_rrms();
+
+  // std::vector<std::vector<std::pair<double, double>>> data(wf.valence().size());
+
+
+
+
+  const auto delta_grid = Grid(r0 * min_pc / 100.0, r0 * max_pc / 100.0,
+                               num_steps, GridType::logarithmic);
+
+  for (const auto dr : delta_grid) {
+    
+
+    // Find delta<r^2>
+    double r2 = r0 + dr;
+    double drr = r0 * r0 - r2 * r2;
+
+    // Update wf2
+    auto nuc2 = wf2.nucleus();
+    nuc2.set_rrms(r2);
+
+    wf2.update_Vnuc(Nuclear::formPotential(nuc2, wf.grid().r()));
+    wf2.solve_core("HartreeFock", 0.0, core_string, 0.0, false);
+    wf2.solve_valence(val_string, false);
+
+    // Find dEs and Fs
+    for (auto i = 0ul; i < wf2.valence().size(); i++) {
+      
+      double dE = (wf2.valence()[i].en() - wf.valence()[i].en())*PhysConst::Hartree_GHz;
+
+      double F = dE / drr;
+
+      std::cout << F << "\n";
+    }   
+  }
+  */
+}
+
+
+
+// Analytically evaluate the normal mass shift NMS in the relativitistic case
+void massShift(const IO::InputBlock &input, const Wavefunction &wf) {
+
+  const auto &orbitals = wf.valence();
+
+  std::cout
+      << "     state  "
+      << "k   Rinf its   eps     delEnms (au)   delEnms (/cm)      En (au)         En (/cm)\n";
+
+  int i = 0;
+  for (const auto &phi : orbitals) {
+    
+    // Mass of electron
+    const double m_e = 1;
+
+    // Mass of nucleus - naive approximation
+    const double m_A = wf.Anuc()*PhysConst::m_p;
+   
+    // Energy correction (NMS)
+    const double dEnms = (-m_e / (m_A + m_e))*phi.en();
+
+    // Output results
+    printf("%-2i %7s %2i  %5.1f %2i  %5.0e %15.9f %15.3f %15.9f %15.3f", i++,
+           phi.symbol().c_str(), phi.kappa(), phi.rinf(), phi.its(), phi.eps(),
+           dEnms, dEnms*PhysConst::Hartree_invcm, phi.en() + dEnms, 
+           (phi.en() + dEnms)*PhysConst::Hartree_invcm);
+    printf("\n");
+  }
+
 }
 
 } // namespace Module
