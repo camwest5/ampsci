@@ -138,9 +138,12 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   // Create second wavefunction
   Wavefunction wf2 = ampsci(new_input);
 
-  const auto r0 = wf.get_rrms();
+  std::cout << "\nDetermining field shift correction between \n  " << wf.atom() 
+            << " " << wf.nucleus() << " and \n  " << wf2.atom() << " " 
+            << wf.nucleus() << "\nvia F = dE / d<r^2>\n";
 
   // Find delta<r^2>
+  const auto r0 = wf.get_rrms();
   const auto r2 = wf2.get_rrms();
   const auto drr = r2 * r2 - r0 * r0;
 
