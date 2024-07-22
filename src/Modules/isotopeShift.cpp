@@ -108,13 +108,9 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     return;
   }
 
-  // Calculate field shift
   const auto A2 = input.get("A2");
-
-  // Run ampsci for second wavefunction with different isotope (otherwise same parameters)
   
   // Read original input file again, much like in main()
-
   auto new_input = IO::InputBlock("ampsci", input.path(), std::fstream(input.path()));
 
   new_input.merge("Atom{A = " + A2.value() + ";}"); 
@@ -159,12 +155,10 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     double dE = (Fv.en() - Fv0.en())*PhysConst::Hartree_GHz;
     double F = dE / drr;
     
-
     printf("%4s  %7.5f  %+7.5f  %11.4e  %11.4e  %10.3e\n",
                  Fv.shortSymbol().c_str(), r2, r2 - r0, drr, dE, F);
   }     
 }
-
 
 // Analytically evaluate the normal mass shift NMS in the relativitistic case
 void massShift(const IO::InputBlock &input, const Wavefunction &wf) {
