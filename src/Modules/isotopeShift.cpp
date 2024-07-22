@@ -1,3 +1,4 @@
+#include "ampsci.hpp"
 #include "Modules/isotopeShift.hpp"
 #include "DiracOperator/DiracOperator.hpp" //For E1 operator
 #include "IO/InputBlock.hpp"
@@ -101,23 +102,14 @@ void fieldShift(const IO::InputBlock &input, const Wavefunction &wf) {
 void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   input.check(
       {{"", "Determines isotope shift"},
-       {"print", "Print each step? [true]"},
-       {"min_pc", "Minimum percentage shift in r [1.0e-3]"},
-       {"max_pc", "Maximum percentage shift in r [1.0e-1]"},
-       {"num_steps", "Number of steps for derivative (for each sign)? [3]"}});
+       {"A2", "Isotope mass number"}});
   // If we are just requesting 'help', don't run module:
   if (input.has_option("help")) {
     return;
   }
 
-
   // Calculate field shift
-
-  const auto print = input.get("print", true);
-
-  const auto min_pc = input.get("min_pc", 1.0e-3);
-  const auto max_pc = input.get("max_pc", 1.0e-1);
-  const auto num_steps = input.get<unsigned long>("num_steps", 3);
+  const auto A2 = input.get("A2");
 
   // Run ampsci for second wavefunction with different isotope (otherwise same parameters)
   
@@ -125,13 +117,14 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
 
   auto new_input = IO::InputBlock("ampsci", input.path(), std::fstream(input.path()));
 
-  std::string new_A = "Atom{A = 100;}";
-  new_input.add(new_A, true); 
+  new_input.merge("Atom{A = " + A2.value() + ";}"); 
   // Currently just adds A = 100 without removing previous. OK because it reads the last,
   // but would be safer to remove original
 
   // Remove all modules
-  for (auto block : new_input.blocks()) {
+  const auto blocks_copy = new_input.blocks();
+
+  for (const auto block : blocks_copy) {  
     auto name = block.name();
 
     if (name.substr(0, 8) == "Module::") {
@@ -140,57 +133,34 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 
   // Create second wavefunction
+  std::cout << "\nCreating second wavefunction.\n";
 
-  /*
   // Create second wavefunction
-  Wavefunction wf2(wf.grid_sptr(), wf.nucleus(),  wf.alpha() / PhysConst::alpha);
+  Wavefunction wf2 = ampsci(new_input);
 
-  std::cout << "Calculating field shift corrections for \n"
-            << wf.atom() << ", " << wf.nucleus() << "\n"
-            << "By fitting de = F<dr^2> for small delta r\n";
-
-  wf2.copySigma(wf.Sigma()); // Not quite correct, as wfB's sigma should be determined 'from scratch'
-
-  const auto core_string = wf.coreConfiguration();
-  const auto val_string = DiracSpinor::state_config(wf.valence());
   const auto r0 = wf.get_rrms();
 
-  // std::vector<std::vector<std::pair<double, double>>> data(wf.valence().size());
+  // Find delta<r^2>
+  const auto r2 = wf2.get_rrms();
+  const auto drr = r2 * r2 - r0 * r0;
 
+  // Find dEs and Fs
+  std::cout << "\n   r_rms (fm)    del(r)     del(r^2)     dE (GHz)   F "
+                 "(GHz/fm^2)\n";
 
+  for (auto i = 0ul; i < wf2.valence().size(); i++) {
+    
+    const auto &Fv = wf2.valence()[i];
+    const auto &Fv0 = *wf.getState(Fv.n(), Fv.kappa());
 
-
-  const auto delta_grid = Grid(r0 * min_pc / 100.0, r0 * max_pc / 100.0,
-                               num_steps, GridType::logarithmic);
-
-  for (const auto dr : delta_grid) {
+    double dE = (Fv.en() - Fv0.en())*PhysConst::Hartree_GHz;
+    double F = dE / drr;
     
 
-    // Find delta<r^2>
-    double r2 = r0 + dr;
-    double drr = r0 * r0 - r2 * r2;
-
-    // Update wf2
-    auto nuc2 = wf2.nucleus();
-    nuc2.set_rrms(r2);
-
-    wf2.update_Vnuc(Nuclear::formPotential(nuc2, wf.grid().r()));
-    wf2.solve_core("HartreeFock", 0.0, core_string, 0.0, false);
-    wf2.solve_valence(val_string, false);
-
-    // Find dEs and Fs
-    for (auto i = 0ul; i < wf2.valence().size(); i++) {
-      
-      double dE = (wf2.valence()[i].en() - wf.valence()[i].en())*PhysConst::Hartree_GHz;
-
-      double F = dE / drr;
-
-      std::cout << F << "\n";
-    }   
-  }
-  */
+    printf("%4s  %7.5f  %+7.5f  %11.4e  %11.4e  %10.3e\n",
+                 Fv.shortSymbol().c_str(), r2, r2 - r0, drr, dE, F);
+  }     
 }
-
 
 
 // Analytically evaluate the normal mass shift NMS in the relativitistic case
