@@ -134,9 +134,13 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   // Create second wavefunction
   Wavefunction wf2 = ampsci(new_input);
 
+  // Normal mass shift scaling factors - get proper mass!
+  const auto NMS_A = - 1.0 / (wf.Anuc()*PhysConst::m_p + 1.0) + 1.0;
+  const auto NMS_A2 = - 1.0 / (wf2.Anuc()*PhysConst::m_p + 1.0) + 1.0;
+  
   std::cout << "\nDetermining field shift correction between \n  " << wf.atom() 
             << " " << wf.nucleus() << " and \n  " << wf2.atom() << " " 
-            << wf.nucleus() << "\nvia F = dE / d<r^2>\n";
+            << wf2.nucleus() << "\nvia F = dE / d<r^2>\n";
 
   // Find delta<r^2>
   const auto r0 = wf.get_rrms();
@@ -144,20 +148,57 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   const auto drr = r2 * r2 - r0 * r0;
 
   // Find dEs and Fs
-  std::cout << "\n   r_rms (fm)    del(r)     del(r^2)     dE (GHz)   F "
-                 "(GHz/fm^2)\n";
+  std::cout << "\n       del(r^2)     dE (MHz)     F "
+                 "(MHz/fm^2) IS to ground state (MHz)\n";
+
+  auto dE0_FS = 0;
+  auto dE0_NMS = 0;
 
   for (auto i = 0ul; i < wf2.valence().size(); i++) {
     
     const auto &Fv = wf2.valence()[i];
     const auto &Fv0 = *wf.getState(Fv.n(), Fv.kappa());
 
-    double dE = (Fv.en() - Fv0.en())*PhysConst::Hartree_GHz;
-    double F = dE / drr;
     
-    printf("%4s  %7.5f  %+7.5f  %11.4e  %11.4e  %10.3e\n",
-                 Fv.shortSymbol().c_str(), r2, r2 - r0, drr, dE, F);
-  }     
+
+    // Apply normal mass shift 
+    /*
+    const auto NMS_A = -1.0/(wf.Anuc()*PhysConst::m_p + 1.0);
+    const auto NMS_A2 = -1.0/(wf2.Anuc()*PhysConst::m_p + 1.0);
+
+    const auto E_A = NMS_A*Fv0.en() + Fv0.en();
+    const auto E_A2 = NMS_A2*Fv.en() + Fv.en();
+    */
+
+    //double dE = (E_A - E_A2)*PhysConst::Hartree_MHz;
+    double dE = (Fv0.en() - Fv.en())*PhysConst::Hartree_MHz;
+    double F = dE / drr;
+
+    if (i == 0ul) {
+      dE0_FS = dE;
+      // Get proper mass
+//      dE0_NMS = (-1.0/(wf.Anuc()*PhysConst::m_p + 1.0))*PhysConst::Hartree_MHz;
+    }
+
+    const auto NMS = (1.0/PhysConst::m_p)*((wf2.Anuc() - wf.Anuc())/(wf2.Anuc()*wf.Anuc()));
+    const auto IS = NMS + dE0_FS - dE;
+
+    // Print IS between state and ground    
+    printf("%4s  %11.4e  %11.4e  %7.3f  %7.3f\n",
+                 Fv.symbol().c_str(), drr, dE, F, IS);
+
+  }  
+
+
+
+  
+  // use namespace qip::overloads
+  // de = <V|dV|V> = Fv * (v * Fv)
+  // auto dV = wf.Vnuc() - wf2.Vnuc()
+  // Look for F and reproduce
+
+  // Check that normal mass shift is small
+
 }
 
 // Analytically evaluate the normal mass shift NMS in the relativitistic case
