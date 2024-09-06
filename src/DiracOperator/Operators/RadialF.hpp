@@ -26,6 +26,8 @@ private:
 public:
   RadialF(const Grid &rgrid, const std::function<double(double)> &f)
       : ScalarOperator(Parity::even, 1.0, fillVec(rgrid, f)) {}
+  RadialF(const std::vector<double> &v)
+      : ScalarOperator(Parity::even, 1.0, v) {}
   RadialF(const Grid &rgrid, const double n)
       : ScalarOperator(Parity::even, 1.0, fillVec(rgrid, [n](double r) {
                          return std::pow(r, n);

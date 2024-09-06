@@ -4,6 +4,8 @@
 #include "IO/InputBlock.hpp"
 #include "Physics/PhysConst_constants.hpp" // For GHz unit conversion
 #include "Wavefunction/Wavefunction.hpp"
+#include "DiracOperator/Operators/RadialF.hpp"
+#include "ExternalField/TDHF.hpp"
 
 #include <gsl/gsl_fit.h>
 
@@ -100,20 +102,26 @@ void fieldShift(const IO::InputBlock &input, const Wavefunction &wf) {
 }
 
 void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
+  using namespace qip::overloads;
   input.check(
       {{"", "Determines isotope shift"},
-       {"A2", "Isotope mass number"}});
+       {"A2", "Isotope mass number"},
+       {"new_correlations", "Create new correlations for second isotope?"}});
   // If we are just requesting 'help', don't run module:
   if (input.has_option("help")) {
     return;
   }
 
   const auto A2 = input.get("A2");
+  const bool correlations = input.get<bool>("new_correlations", true);
   
   // Read original input file again, much like in main()
   auto new_input = IO::InputBlock("ampsci", input.path(), std::fstream(input.path()));
 
   new_input.merge("Atom{A = " + A2.value() + ";}"); 
+  
+  if (correlations == true) {new_input.merge("Correlations{read = false; write = false;}");}
+  
   // Currently just adds A = 100 without removing previous. OK because it reads the last,
   // but would be safer to remove original
 
@@ -134,9 +142,6 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   // Create second wavefunction
   Wavefunction wf2 = ampsci(new_input);
 
-  // Normal mass shift scaling factors - get proper mass!
-  const auto NMS_A = - 1.0 / (wf.Anuc()*PhysConst::m_p + 1.0) + 1.0;
-  const auto NMS_A2 = - 1.0 / (wf2.Anuc()*PhysConst::m_p + 1.0) + 1.0;
   
   std::cout << "\nDetermining field shift correction between \n  " << wf.atom() 
             << " " << wf.nucleus() << " and \n  " << wf2.atom() << " " 
@@ -148,49 +153,71 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   const auto drr = r2 * r2 - r0 * r0;
 
   // Find dEs and Fs
-  std::cout << "\n       del(r^2)     dE (MHz)     F "
-                 "(MHz/fm^2) IS to ground state (MHz)\n";
+  std::cout << "\n           del(r^2)     dE (MHz) F "
+                 "(MHz/fm^2)    FS (MHz)   NMS (MHz)  IS*  (MHz) dE (<V|dV|V>) F\n";
 
-  auto dE0_FS = 0;
-  auto dE0_NMS = 0;
+
+  // If doesn't work, try flipping sign
+
+  // If still doesn't work, check calcs. How should (H - ε)ψ be introduced?
+
+  
+
+
+  // auto dE2 = Fv0 * (dV * Fv0) * PhysConst::Hartree_MHz;
+
+  auto dV = wf.vnuc() - wf2.vnuc();
+
+  double dE0;
+  double NMS0;
 
   for (auto i = 0ul; i < wf2.valence().size(); i++) {
     
+    
     const auto &Fv = wf2.valence()[i];
     const auto &Fv0 = *wf.getState(Fv.n(), Fv.kappa());
+    double dE = (Fv0.en() - Fv.en())*PhysConst::Hartree_MHz;  
 
-    
-
-    // Apply normal mass shift 
-    /*
-    const auto NMS_A = -1.0/(wf.Anuc()*PhysConst::m_p + 1.0);
-    const auto NMS_A2 = -1.0/(wf2.Anuc()*PhysConst::m_p + 1.0);
-
-    const auto E_A = NMS_A*Fv0.en() + Fv0.en();
-    const auto E_A2 = NMS_A2*Fv.en() + Fv.en();
-    */
-
-    //double dE = (E_A - E_A2)*PhysConst::Hartree_MHz;
-    double dE = (Fv0.en() - Fv.en())*PhysConst::Hartree_MHz;
-    double F = dE / drr;
-
-    if (i == 0ul) {
-      dE0_FS = dE;
-      // Get proper mass
-//      dE0_NMS = (-1.0/(wf.Anuc()*PhysConst::m_p + 1.0))*PhysConst::Hartree_MHz;
+    for (auto j = 0ul; j < dV.size(); j++) {
+      //dV[j] -= dE;
+      //dV[j] *= -1;
     }
 
-    const auto NMS = (1.0/PhysConst::m_p)*((wf2.Anuc() - wf.Anuc())/(wf2.Anuc()*wf.Anuc()));
-    const auto IS = NMS + dE0_FS - dE;
+    const DiracOperator::RadialF dh(dV);
 
-    // Print IS between state and ground    
-    printf("%4s  %11.4e  %11.4e  %7.3f  %7.3f\n",
-                 Fv.symbol().c_str(), drr, dE, F, IS);
+    ExternalField::TDHF tdhf(&dh, wf.vHF());
+    tdhf.solve_core(0, 100, false);
 
-  }  
+    double F = dE / drr;
+    const auto NMSv = (Fv0.en() / 1822.888)*((1.0/wf.Anuc()) - (1.0/wf2.Anuc()))*PhysConst::Hartree_MHz;
+
+    // Not true in general, just for Cs 7sp!
+    const double c3j = Fv.kappa() == -2 ? 0.5 : (1.0/sqrt(2.0));
+
+    auto dE2 = (1/sqrt(2.0))*tdhf.dV(Fv0, Fv0)*PhysConst::Hartree_MHz;
+    
+
+    if (i == 0) {
+      dE0 = dE;
+      NMS0 = NMSv;
+    }
+
+    double FS = dE - dE0;
+    double NMS = NMS0 - NMSv;
+    double IS = FS + NMS;
+
+  // Print IS between state and ground    
+      printf("%4s  %11.4e  %11.4f  %11.4f %11.4f %11.4f %11.4f %11.4f % 11.4e\n",
+              Fv.symbol().c_str(), drr, dE, F, FS, NMS, IS, dE2, dE2 / drr);
+  }
+
+  std::cout << "*IS does not include SMS yet.";
 
 
+  // See Viatkina 2023 for a good list of results for Ca+. Currently matching for FS.
 
+  // Good for Calcium, doesn't agree with Caesium??
+  
   
   // use namespace qip::overloads
   // de = <V|dV|V> = Fv * (v * Fv)
