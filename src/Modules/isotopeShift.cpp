@@ -105,126 +105,146 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   using namespace qip::overloads;
   input.check(
       {{"", "Determines isotope shift"},
-       {"A2", "Isotope mass number"},
-       {"new_correlations", "Create new correlations for second isotope?"}});
+       {"A2", "Second isotope's mass number"},
+       {"new_correlations", "Create new correlations for second isotope? [true]"},
+       {"range", "Range of isotope mass numbers around A2 to include [0]"}});
   // If we are just requesting 'help', don't run module:
   if (input.has_option("help")) {
     return;
   }
 
-  const auto A2 = input.get("A2");
+  const auto A2 = input.get<int>("A2");
   const bool correlations = input.get<bool>("new_correlations", true);
+  const int range = input.get<int>("range", 0);
   
   // Read original input file again, much like in main()
   auto new_input = IO::InputBlock("ampsci", input.path(), std::fstream(input.path()));
 
-  new_input.merge("Atom{A = " + A2.value() + ";}"); 
+  // Create range of As
+  auto wf2s_size = std::abs(wf.Anuc() - A2.value()) > range ? range*2 + 1 : range*2;
   
-  if (correlations == true) {new_input.merge("Correlations{read = false; write = false;}");}
+  // This seems the best way to do multiple isotopes - but doesn't work :(
   
-  // Currently just adds A = 100 without removing previous. OK because it reads the last,
-  // but would be safer to remove original
+  
+  std::vector<Wavefunction> wf2s;
+ 
+  for (int i = 0; i < wf2s_size; i++) {
+    
+    int new_A = i + A2.value() - range;
 
-  // Remove all modules
-  const auto blocks_copy = new_input.blocks();
+    if (new_A == wf.Anuc()) {
+      continue;
+    }
+    
+    new_input.merge("Atom{A = " + std::to_string(new_A) + ";}"); 
+    if (correlations == true) {new_input.merge("Correlations{read = false; write = false;}");}
+  
+    // Currently just adds new_A without removing previous. OK because it reads the last,
+    // but would be safer to remove original
 
-  for (const auto block : blocks_copy) {  
-    auto name = block.name();
+    // Remove all modules
+    const auto blocks_copy = new_input.blocks();
 
-    if (name.substr(0, 8) == "Module::") {
-      new_input.remove_block(name);
-    } 
+    for (const auto block : blocks_copy) {  
+      auto name = block.name();
+
+      if (name.substr(0, 8) == "Module::") {
+        new_input.remove_block(name);
+      } 
+    }
+
+    // Create second wavefunction
+    std::cout << "\nCreating wavefunction for A = " << new_A << ".\n";
+
+
+    
+    // Create second wavefunction
+    wf2s.push_back(ampsci(new_input));
   }
-
-  // Create second wavefunction
-  std::cout << "\nCreating second wavefunction.\n";
-
-  // Create second wavefunction
-  Wavefunction wf2 = ampsci(new_input);
-
   
-  std::cout << "\nDetermining field shift correction between \n  " << wf.atom() 
-            << " " << wf.nucleus() << " and \n  " << wf2.atom() << " " 
-            << wf2.nucleus() << "\nvia F = dE / d<r^2>\n";
+  
+  std::cout << "\nDetermining field and normal mass shift parameters between \n  " << wf.atom() 
+            << " " << wf.nucleus() << "\n and \n";
+  
+  for (int i = 0; i < wf2s.size(); i++) {
+    std::cout << "  " << wf2s[i].atom() << " " << wf2s[i].nucleus();
+  }
+ 
+ std::cout << "\nA               del(r^2)     dE (MHz) F (MHz/fm^2)    "
+            << "FS (MHz)   NMS (MHz)  IS*  (MHz) dE (<V|dV|V>) F\n";
 
   // Find delta<r^2>
   const auto r0 = wf.get_rrms();
-  const auto r2 = wf2.get_rrms();
-  const auto drr = r2 * r2 - r0 * r0;
 
-  // Find dEs and Fs
-  std::cout << "\n           del(r^2)     dE (MHz) F "
-                 "(MHz/fm^2)    FS (MHz)   NMS (MHz)  IS*  (MHz) dE (<V|dV|V>) F\n";
+  std::cout << "\nCheckpoint:\nwf2s.size() = " << wf2s.size() << "\n\n"; // << "\n" << "A2_0 = " << wf2s[0].atomicSymbol();
 
+  for (int i = 0; i < wf2s.size(); i++) {
+    const auto r2 = wf2s[i].get_rrms();
+    const auto drr = r2 * r2 - r0 * r0;
 
-  // If doesn't work, try flipping sign
+   // auto dE2 = Fv0 * (dV * Fv0) * PhysConst::Hartree_MHz;
 
-  // If still doesn't work, check calcs. How should (H - ε)ψ be introduced?
+    auto dV = wf.vnuc() - wf2s[i].vnuc();
 
-  
+    double dE0;
+    double NMS0;
 
+    for (auto j = 0ul; j < wf2s[i].valence().size(); j++) {
+      
+      
+      const auto &Fv = wf2s[i].valence()[j];
+      const auto &Fv0 = *wf.getState(Fv.n(), Fv.kappa());
+      double dE = (Fv0.en() - Fv.en())*PhysConst::Hartree_MHz;  
 
-  // auto dE2 = Fv0 * (dV * Fv0) * PhysConst::Hartree_MHz;
+      /*for (auto j = 0ul; j < dV.size(); j++) {
+        //dV[j] -= dE;
+        //dV[j] *= -1;
+      }*/
 
-  auto dV = wf.vnuc() - wf2.vnuc();
+      const DiracOperator::RadialF dh(dV);
 
-  double dE0;
-  double NMS0;
+      ExternalField::TDHF tdhf(&dh, wf.vHF());
+      tdhf.solve_core(0, 100, false);
 
-  for (auto i = 0ul; i < wf2.valence().size(); i++) {
-    
-    
-    const auto &Fv = wf2.valence()[i];
-    const auto &Fv0 = *wf.getState(Fv.n(), Fv.kappa());
-    double dE = (Fv0.en() - Fv.en())*PhysConst::Hartree_MHz;  
+      double F = dE / drr;
+      const auto NMSv = (Fv0.en() / 1822.888)*((1.0/wf.Anuc()) - (1.0/wf2s[i].Anuc()))*PhysConst::Hartree_MHz;
 
-    for (auto j = 0ul; j < dV.size(); j++) {
-      //dV[j] -= dE;
-      //dV[j] *= -1;
+      // Not true in general, just for Cs 7sp!
+      const double c3j = Fv.kappa() == -2 ? 0.5 : (1.0/sqrt(2.0));
+
+      auto dE2 = (1/sqrt(2.0))*tdhf.dV(Fv0, Fv0)*PhysConst::Hartree_MHz;
+      
+
+      if (i == 0) {
+        dE0 = dE;
+        NMS0 = NMSv;
+      }
+
+      double FS = dE - dE0;
+      double NMS = NMS0 - NMSv;
+      double IS = FS + NMS;
+
+    // Print IS between state and ground    
+        printf("%3f %4s  %11.4e  %11.4f  %11.4f %11.4f %11.4f %11.4f %11.4f % 11.4e\n",
+                wf2s[i].Anuc(), Fv.symbol().c_str(), drr, dE, F, FS, NMS, IS, dE2, dE2 / drr);
     }
 
-    const DiracOperator::RadialF dh(dV);
 
-    ExternalField::TDHF tdhf(&dh, wf.vHF());
-    tdhf.solve_core(0, 100, false);
 
-    double F = dE / drr;
-    const auto NMSv = (Fv0.en() / 1822.888)*((1.0/wf.Anuc()) - (1.0/wf2.Anuc()))*PhysConst::Hartree_MHz;
+    // See Viatkina 2023 for a good list of results for Ca+. Currently matching for FS.
 
-    // Not true in general, just for Cs 7sp!
-    const double c3j = Fv.kappa() == -2 ? 0.5 : (1.0/sqrt(2.0));
-
-    auto dE2 = (1/sqrt(2.0))*tdhf.dV(Fv0, Fv0)*PhysConst::Hartree_MHz;
+    // Good for Calcium, doesn't agree with Caesium??
     
+    
+    // use namespace qip::overloads
+    // de = <V|dV|V> = Fv * (v * Fv)
+    // auto dV = wf.Vnuc() - wf2.Vnuc()
+    // Look for F and reproduce
 
-    if (i == 0) {
-      dE0 = dE;
-      NMS0 = NMSv;
-    }
-
-    double FS = dE - dE0;
-    double NMS = NMS0 - NMSv;
-    double IS = FS + NMS;
-
-  // Print IS between state and ground    
-      printf("%4s  %11.4e  %11.4f  %11.4f %11.4f %11.4f %11.4f %11.4f % 11.4e\n",
-              Fv.symbol().c_str(), drr, dE, F, FS, NMS, IS, dE2, dE2 / drr);
+    // Check that normal mass shift is small
   }
 
-  std::cout << "*IS does not include SMS yet.";
-
-
-  // See Viatkina 2023 for a good list of results for Ca+. Currently matching for FS.
-
-  // Good for Calcium, doesn't agree with Caesium??
-  
-  
-  // use namespace qip::overloads
-  // de = <V|dV|V> = Fv * (v * Fv)
-  // auto dV = wf.Vnuc() - wf2.Vnuc()
-  // Look for F and reproduce
-
-  // Check that normal mass shift is small
+  std::cout << "*IS does not include SMS yet."; 
 
 }
 
