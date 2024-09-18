@@ -1,4 +1,5 @@
 #include "Modules/isotopeShift.hpp"
+#include "Angular/Wigner369j.hpp"
 #include "DiracOperator/DiracOperator.hpp" //For E1 operator
 #include "DiracOperator/Operators/RadialF.hpp"
 #include "ExternalField/TDHF.hpp"
@@ -174,7 +175,8 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 
   std::cout << "\nA               del(r^2)     dE (MHz) F (MHz/fm^2)    "
-            << "FS (MHz)   NMS (MHz)  IS*  (MHz) dE (<V|dV|V>) F\n";
+            << "FS (MHz)   NMS (MHz)  tvv (MHz)  SMS (MHz)  IS*  (MHz) dE "
+               "(<V|dV|V>) F\n";
 
   // Find delta<r^2>
   const auto r0 = wf.get_rrms();
@@ -222,15 +224,42 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
         NMS0 = NMSv;
       }
 
+      // Specific mass shift
+      double tvv = 0;
+
+      // Sum over core states
+      for (auto k = 0ul; k < wf.core().size(); k++) {
+
+        auto Fa = wf.core()[k];
+
+        // Find jv, <v||C^1||a>, |P(va)|
+        double twojv = Angular::twoj_k(Fv.kappa());
+        double RME = Angular::Ck_kk(k, Fv.kappa(), Fa.kappa());
+
+        // Need factor -i ?? Not really, because taking |Pva|^2. But remember it doesn't include!
+        double Pva = DiracOperator::p().radialIntegral(Fv, Fa);
+
+        tvv += (1.0 / twojv) * std::abs(RME * RME) * std::abs(Pva * Pva);
+      }
+      tvv *= -1.0 * PhysConst::Hartree_MHz;
+
+      // Improve upon this mass measurement!
+      double MA = PhysConst::m_p * wf.Anuc();
+
+      // Currently testing first order, <v|T|v>
+      double SMS = tvv * (1.0 / 2.0) * MA / ((MA + 1) * (MA + 1));
       double FS = dE - dE0;
       double NMS = NMS0 - NMSv;
-      double IS = FS + NMS;
+
+      double IS = FS + NMS + SMS;
 
       // Print IS between state and ground
-      printf("%3i %4s  %11.4e  %11.4f  %11.4f %11.4f %11.4f %11.4f %11.4f % "
-             "11.4f\n",
-             wf2s.at(i).Anuc(), Fv.symbol().c_str(), drr, dE, F, FS, NMS, IS,
-             dE2, dE2 / drr);
+      printf(
+          "%3i %4s  %11.4e  %11.4f  %11.4f %11.4f %11.4f %11.4f %11.4f %11.4f "
+          "%11.4f % "
+          "11.4f\n",
+          wf2s.at(i).Anuc(), Fv.symbol().c_str(), drr, dE, F, FS, NMS, SMS, tvv,
+          IS, dE2, dE2 / drr);
 
       // fmt::print("{:3}", wf2s.at(i).Anuc());
     }
