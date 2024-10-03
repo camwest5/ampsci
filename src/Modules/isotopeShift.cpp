@@ -164,8 +164,8 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     wf2s.push_back(ampsci(new_input));
   }
 
-  std::cout << "\nCalculating isotope shift for excited-ground state "
-               "transitions between reference isotope\n  "
+  std::cout << "\nCalculating isotope shift contributions between reference "
+               "isotope\n  "
             << wf.atom() << " " << wf.nucleus() << "\n and the isotopes\n";
 
   for (int i = 0; i < wf2s.size(); i++) {
@@ -274,15 +274,17 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
 
       fmt::print(
           "{:3}  {:4}  {:13.4f} {:13.4f} {:9.4f} {:10.4f} {:11.4f} {:11.4f}\n",
-          wf2s[i].Anuc(), Fv2.symbol().c_str(), K, F, NMS, SMS, FS, IS);
+          wf2s[i].Anuc(), Fv2.symbol().c_str(), K, F, NMSv, SMSv, FSv, IS);
       /*
       printf("%3i %4s  %11.4e  %11.4f  %11.4f %11.4f %11.4f %11.4f %11.4f \n",
              wf2s.at(i).Anuc(), Fv.symbol().c_str(), drr, dE, dE / drr, FS, NMS,
              SMS, IS);
       */
     }
-    std::cout
-        << "*SMS is only to first order, and Ksms is incorrectly calculated!\n";
+    std::cout << "*SMS is only to first order, and Ksms is incorrect!\n\nNote: "
+                 "NMS, SMS and FS are the differences between isotopes. "
+                 "Subtract between states to find isotope shift. IS is this "
+                 "between each state and the ground state.\n";
 
     // See Viatkina 2023 for a good list of results for Ca+. Currently matching for FS.
 
