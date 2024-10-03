@@ -1,3 +1,4 @@
+
 #include "Modules/isotopeShift.hpp"
 #include "Angular/Wigner369j.hpp"
 #include "DiracOperator/DiracOperator.hpp" //For E1 operator
@@ -7,6 +8,7 @@
 #include "Physics/PhysConst_constants.hpp" // For GHz unit conversion
 #include "Wavefunction/Wavefunction.hpp"
 #include "ampsci.hpp"
+#include <cmath>
 
 #include <gsl/gsl_fit.h>
 
@@ -105,12 +107,12 @@ void fieldShift(const IO::InputBlock &input, const Wavefunction &wf) {
 
 void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   using namespace qip::overloads;
-  input.check(
-      {{"", "Determines isotope shift"},
-       {"A2", "Second isotope's mass number"},
-       {"new_correlations",
-        "Create new correlations for second isotope? [true]"},
-       {"range", "Range of isotope mass numbers around A2 to include [0]"}});
+  input.check({{"", "Determines isotope shift"},
+               {"A2", "Second isotope's mass number"},
+               {"new_correlations",
+                "Create new correlations for second isotope? [true]"},
+               {"plusminus",
+                "Range of isotope mass numbers around A2 to include [0]"}});
   // If we are just requesting 'help', don't run module:
   if (input.has_option("help")) {
     return;
@@ -118,7 +120,7 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const auto A2 = input.get<int>("A2");
   const bool correlations = input.get<bool>("new_correlations", true);
-  const int range = input.get<int>("range", 0);
+  const int range = input.get<int>("plusminus", 0);
 
   // Read original input file again, much like in main()
   auto new_input =
@@ -195,9 +197,9 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     double SMS_ground;
 
     std::cout << "\nIsotope shift parameters and energy contributions:";
-    std::cout << "\nA     state  Ksms (GHz amu) F (MHz/fm^2) NMS (MHz) "
-                 "SMS* (MHz)    FS (MHz) IS to "
-              << wf.valence()[0].shortSymbol() << "(MHz)\n";
+    std::cout << "\nA     state  Knms (GHz amu) Ksms (GHz amu) F "
+                 "(MHz/fm^2) NMS (MHz) SMS* (MHz)    FS (MHz) IS to "
+              << wf.valence()[0].shortSymbol() << " (MHz)\n";
 
     for (auto j = 0ul; j < wf2s.at(i).valence().size(); j++) {
 
@@ -214,10 +216,14 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
       auto FSv = factor * (dV.reducedME(Fv0, Fv0) + tdhf.dV(Fv0, Fv0)) *
                  PhysConst::Hartree_MHz;
 
-      // Normal mass shift - which energy should be used? This formula is from Dzuba (2005)
-      const auto NMSv = (Fv0.en() / PhysConst::u_NMU) *
-                        ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) *
-                        PhysConst::Hartree_MHz;
+      // Normal mass shift - which energy should be used? This formula is from Dzuba (2005) and also Viatkina (2023) (where the negative is introduced)
+
+      // In GHz amu
+      double Knms = -Fv0.en() * PhysConst::Hartree_GHz / PhysConst::u_NMU;
+
+      // In MHz
+      const auto NMSv =
+          Knms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
 
       // Specific mass shift - currently first order, <v|T|v> = tvv2
       double tvv0 = 0;
@@ -227,8 +233,6 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
       for (auto k = 0ul; k < wf.core().size(); k++) {
 
         // Does A0 and A2 wavefunctions at the same time for each state, but this is not efficient if running multiple isotopes (only need to do wf0 once).
-
-        // Naming: A is generally wf0, unlabeled or A2 should be generally wf2s[i].
         auto Fa2 = wf2s[i].core()[k];
         auto Fa0 = wf.core()[k];
 
@@ -264,7 +268,12 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
 
       // IS parameters for each state
       double F = FSv / drr;
-      double K = tvv2 * PhysConst::Hartree_GHz;
+
+      // In GHz amu
+      double Ksms = tvv0 * PhysConst::Hartree_GHz / PhysConst::u_NMU;
+
+      // In MHz
+      SMSv = Ksms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
 
       // IS parameters between excited and ground states
       double FS = FS_ground - FSv;
@@ -272,19 +281,19 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
       double SMS = SMS_ground - SMSv;
       double IS = FS + NMS + SMS;
 
-      fmt::print(
-          "{:3}  {:4}  {:13.4f} {:13.4f} {:9.4f} {:10.4f} {:11.4f} {:11.4f}\n",
-          wf2s[i].Anuc(), Fv2.symbol().c_str(), K, F, NMSv, SMSv, FSv, IS);
+      fmt::print("{:3}  {:4}  {:13.4f} {:13.4f} {:13.4f} {:9.4f} {:10.4f} "
+                 "{:11.4f} {:11.4f}\n",
+                 wf2s[i].Anuc(), Fv2.symbol().c_str(), Knms, Ksms, F, NMSv,
+                 SMSv, FSv, IS);
       /*
       printf("%3i %4s  %11.4e  %11.4f  %11.4f %11.4f %11.4f %11.4f %11.4f \n",
              wf2s.at(i).Anuc(), Fv.symbol().c_str(), drr, dE, dE / drr, FS, NMS,
              SMS, IS);
       */
     }
-    std::cout << "*SMS is only to first order, and Ksms is incorrect!\n\nNote: "
+    std::cout << "*SMS is only to first order\n\nNote: "
                  "NMS, SMS and FS are the differences between isotopes. "
-                 "Subtract between states to find isotope shift. IS is this "
-                 "between each state and the ground state.\n";
+                 "\nSubtract between states to find isotope shift.\n";
 
     // See Viatkina 2023 for a good list of results for Ca+. Currently matching for FS.
 
