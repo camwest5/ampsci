@@ -177,11 +177,47 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   //std::cout << "\nA               del(r^2)     dE (MHz) F (MHz/fm^2)    "
   //        << "FS (MHz)   NMS (MHz)  SMS* (MHz)   IS (MHz)\n";
 
+  // Find mass shift constants for all valence states using reference isotope
+  std::vector<double> Ksms(wf.valence().size());
+  std::vector<double> Knms(wf.valence().size());
+
+  for (auto i = 0ul; i < wf.valence().size(); i++) {
+    const auto &Fv = wf.valence()[i];
+
+    // Specific mass shift - currently first order, <v|T|v> = tvv
+    double tvv = 0;
+
+    // Sum over core states
+    for (auto k = 0ul; k < wf.core().size(); k++) {
+
+      // Does A0 and A2 wavefunctions at the same time for each state, but this is not efficient if running multiple isotopes (only need to do wf0 once).
+      auto Fa = wf.core()[k];
+
+      // Reduced matrix element <v||C^1||a>
+      double RME = Angular::Ck_kk(1, Fv.kappa(), Fa.kappa());
+
+      // Doesn't include factor -i, not important here but note for future use
+      double Pva = DiracOperator::p().radialIntegral(Fv, Fa);
+
+      tvv += (1.0 / Fv.twojp1()) * std::abs(RME * RME) * std::abs(Pva * Pva);
+    }
+    tvv *= -1.0;
+
+    // In GHz amu
+    Ksms[i] = tvv * PhysConst::Hartree_GHz / PhysConst::u_NMU;
+
+    // Normal mass shift
+    // In GHz amu
+    Knms[i] = Fv.en() * PhysConst::Hartree_GHz / PhysConst::u_NMU;
+  }
+
+  // Determine remaining terms between isotopes
+
   // Find delta<r^2>
   const auto r0 = wf.get_rrms();
 
   for (int i = 0; i < wf2s.size(); i++) {
-    const auto r2 = wf2s.at(i).get_rrms();
+    const auto r2 = wf2s[i].get_rrms();
     const auto drr = r2 * r2 - r0 * r0;
 
     // Calculate field shift via <v|dV|v>
@@ -201,110 +237,59 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
                  "(MHz/fm^2) NMS (MHz) SMS* (MHz)    FS (MHz) IS to "
               << wf.valence()[0].shortSymbol() << " (MHz)\n";
 
-    for (auto j = 0ul; j < wf2s.at(i).valence().size(); j++) {
+    for (auto j = 0ul; j < wf.valence().size(); j++) {
 
-      const auto &Fv2 = wf2s[i].valence()[j];
-      const auto &Fv0 = *wf.getState(Fv2.n(), Fv2.kappa());
+      const auto &Fv = wf.valence()[j];
 
-      /* Not currently using this approach - this determines dE just by taking the difference
-      double dE = (Fv0.en() - Fv.en()) * PhysConst::Hartree_MHz;
+      /* 
+      // Not currently using this approach - this determines dE just by taking the difference
+      // Might be worth keeping for future reference
+
+      double dE = (Fv.en() - Fv.en()) * PhysConst::Hartree_MHz;
       double F = dE / drr;
       */
 
       // Field shift
-      const auto factor = dV.rme3js(Fv0.twoj(), Fv0.twoj());
-      auto FSv = factor * (dV.reducedME(Fv0, Fv0) + tdhf.dV(Fv0, Fv0)) *
+      const auto factor = dV.rme3js(Fv.twoj(), Fv.twoj());
+      auto FSv = factor * (dV.reducedME(Fv, Fv) + tdhf.dV(Fv, Fv)) *
                  PhysConst::Hartree_MHz;
 
       // Normal mass shift - which energy should be used? This formula is from Dzuba (2005) and also Viatkina (2023) (where the negative is introduced)
 
-      // In GHz amu
-      double Knms = -Fv0.en() * PhysConst::Hartree_GHz / PhysConst::u_NMU;
+      // Field shift parameter
+      double F = FSv / drr;
+
+      // Mass shift contributions
 
       // In MHz
       const auto NMSv =
           Knms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
 
-      // Specific mass shift - currently first order, <v|T|v> = tvv2
-      double tvv0 = 0;
-      double tvv2 = 0;
+      // In MHz
+      const auto SMSv =
+          Ksms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
 
-      // Sum over core states
-      for (auto k = 0ul; k < wf.core().size(); k++) {
-
-        // Does A0 and A2 wavefunctions at the same time for each state, but this is not efficient if running multiple isotopes (only need to do wf0 once).
-        auto Fa2 = wf2s[i].core()[k];
-        auto Fa0 = wf.core()[k];
-
-        // Reduced matrix element <v||C^1||a>
-        double RME2 = Angular::Ck_kk(1, Fv2.kappa(), Fa2.kappa());
-        double RME0 = Angular::Ck_kk(1, Fv0.kappa(), Fa0.kappa());
-
-        // Doesn't include factor -i, not important here but note for future use
-        double Pva2 = DiracOperator::p().radialIntegral(Fv2, Fa2);
-        double Pva0 = DiracOperator::p().radialIntegral(Fv0, Fa0);
-
-        tvv2 += (1.0 / Fv2.twojp1()) * std::abs(RME2 * RME2) *
-                std::abs(Pva2 * Pva2);
-        tvv0 += (1.0 / Fv0.twojp1()) * std::abs(RME0 * RME0) *
-                std::abs(Pva0 * Pva0);
-      }
-      tvv2 *= -1.0;
-      tvv0 *= -1.0;
-      double MA2 = wf2s[i].Anuc() * PhysConst::u_NMU;
-      double MA0 = wf.Anuc() * PhysConst::u_NMU;
-
-      double SMS0 = tvv0 * (MA0 / ((MA0 + 1) * (MA0 + 1)));
-      double SMS2 = tvv2 * (MA2 / ((MA2 + 1) * (MA2 + 1)));
-
-      double SMSv = (SMS2 - SMS0) * PhysConst::Hartree_MHz;
-
-      // Store ground state
+      // Ground state parameters
       if (j == 0) {
         FS_ground = FSv;
-        NMS_ground = NMSv;
-        SMS_ground = SMSv;
+        NMS_ground = NMSv[j];
+        SMS_ground = SMSv[j];
       }
 
-      // IS parameters for each state
-      double F = FSv / drr;
-
-      // In GHz amu
-      double Ksms = tvv0 * PhysConst::Hartree_GHz / PhysConst::u_NMU;
-
-      // In MHz
-      SMSv = Ksms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
-
       // IS parameters between excited and ground states
-      double FS = FS_ground - FSv;
-      double NMS = NMS_ground - NMSv;
-      double SMS = SMS_ground - SMSv;
-      double IS = FS + NMS + SMS;
+      const auto FS = FSv - FS_ground;
+      const auto NMS = NMSv[j] - NMS_ground;
+      const auto SMS = SMSv[j] - SMS_ground;
+      const auto IS = FS + NMS + SMS;
 
       fmt::print("{:3}  {:4}  {:13.4f} {:13.4f} {:13.4f} {:9.4f} {:10.4f} "
                  "{:11.4f} {:11.4f}\n",
-                 wf2s[i].Anuc(), Fv2.symbol().c_str(), Knms, Ksms, F, NMSv,
-                 SMSv, FSv, IS);
-      /*
-      printf("%3i %4s  %11.4e  %11.4f  %11.4f %11.4f %11.4f %11.4f %11.4f \n",
-             wf2s.at(i).Anuc(), Fv.symbol().c_str(), drr, dE, dE / drr, FS, NMS,
-             SMS, IS);
-      */
+                 wf2s[i].Anuc(), Fv.symbol().c_str(), Knms[j], Ksms[j], F,
+                 NMSv[j], SMSv[j], FSv, IS);
     }
     std::cout << "*SMS is only to first order\n\nNote: "
                  "NMS, SMS and FS are the differences between isotopes. "
-                 "\nSubtract between states to find isotope shift.\n";
-
-    // See Viatkina 2023 for a good list of results for Ca+. Currently matching for FS.
-
-    // Good for Calcium, doesn't agree with Caesium??
-
-    // use namespace qip::overloads
-    // de = <V|dV|V> = Fv * (v * Fv)
-    // auto dV = wf.Vnuc() - wf2.Vnuc()
-    // Look for F and reproduce
-
-    // Check that normal mass shift is small
+                 "\nSubtract between states to find isotope shifts.\n";
   }
 }
 
