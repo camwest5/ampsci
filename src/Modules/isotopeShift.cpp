@@ -174,9 +174,8 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     std::cout << "  " << wf2s[i].atom() << " " << wf2s[i].nucleus() << "\n";
   }
 
-  std::cout << "\nA               del(r^2)     dE (MHz) F (MHz/fm^2)    "
-            << "FS (MHz)   NMS (MHz)  tvv (MHz)  SMS (MHz)  IS*  (MHz) dE "
-               "(<V|dV|V>) F\n";
+  //std::cout << "\nA               del(r^2)     dE (MHz) F (MHz/fm^2)    "
+  //        << "FS (MHz)   NMS (MHz)  SMS* (MHz)   IS (MHz)\n";
 
   // Find delta<r^2>
   const auto r0 = wf.get_rrms();
@@ -184,82 +183,94 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   for (int i = 0; i < wf2s.size(); i++) {
     const auto r2 = wf2s.at(i).get_rrms();
     const auto drr = r2 * r2 - r0 * r0;
+    const DiracOperator::RadialF dV(wf.vnuc() - wf2s[i].vnuc());
 
-    // auto dE2 = Fv0 * (dV * Fv0) * PhysConst::Hartree_MHz;
-
-    auto dV = wf.vnuc() - wf2s[i].vnuc();
-
-    double dE0;
+    double FS0;
     double NMS0;
+    double SMS0;
 
     for (auto j = 0ul; j < wf2s.at(i).valence().size(); j++) {
 
       const auto &Fv = wf2s[i].valence()[j];
       const auto &Fv0 = *wf.getState(Fv.n(), Fv.kappa());
+
+      /* Not currently using this approach - this determines dE just by taking the difference
       double dE = (Fv0.en() - Fv.en()) * PhysConst::Hartree_MHz;
+      double F = dE / drr;
+      */
 
-      /*for (auto j = 0ul; j < dV.size(); j++) {
-        //dV[j] -= dE;
-        //dV[j] *= -1;
-      }*/
+      // Calculate field shift via <v|dV|v>
 
-      const DiracOperator::RadialF dh(dV);
-
-      ExternalField::TDHF tdhf(&dh, wf.vHF());
+      ExternalField::TDHF tdhf(&dV, wf.vHF());
 
       // In general, make this true, and loop through results afterwards.
       tdhf.solve_core(0, 100, false);
 
-      double F = dE / drr;
-      const auto NMSv = (Fv0.en() / 1822.888) *
-                        ((1.0 / wf.Anuc()) - (1.0 / wf2s[i].Anuc())) *
-                        PhysConst::Hartree_MHz;
-
-      const auto factor = dh.rme3js(Fv0.twoj(), Fv0.twoj());
-      auto dE2 = factor * (dh.reducedME(Fv0, Fv0) + tdhf.dV(Fv0, Fv0)) *
+      const auto factor = dV.rme3js(Fv0.twoj(), Fv0.twoj());
+      auto FSv = factor * (dV.reducedME(Fv0, Fv0) + tdhf.dV(Fv0, Fv0)) *
                  PhysConst::Hartree_MHz;
 
-      if (j == 0) {
-        dE0 = dE;
-        NMS0 = NMSv;
-      }
+      // Normal mass shift
+      const auto NMSv = (Fv0.en() / PhysConst::u_NMU) *
+                        ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) *
+                        PhysConst::Hartree_MHz;
 
-      // Specific mass shift
+      // Specific mass shift - currently first order, <v|T|v> = tvv
       double tvv = 0;
+      double tvv_A = 0;
 
       // Sum over core states
       for (auto k = 0ul; k < wf.core().size(); k++) {
 
-        auto Fa = wf.core()[k];
+        auto Fa = wf2s[i].core()[k];
+        auto FaA = wf.core()[k];
 
-        // Find jv, <v||C^1||a>, |P(va)|
-        double twojv = Angular::twoj_k(Fv.kappa());
-        double RME = Angular::Ck_kk(k, Fv.kappa(), Fa.kappa());
+        // Reduced matrix element <v||C^1||a>
+        double RME = Angular::Ck_kk(1, Fv.kappa(), Fa.kappa());
+        double RME_A = Angular::Ck_kk(1, Fv0.kappa(), FaA.kappa());
 
-        // Need factor -i ?? Not really, because taking |Pva|^2. But remember it doesn't include!
+        // Doesn't include factor -i, not important here but note for future use
         double Pva = DiracOperator::p().radialIntegral(Fv, Fa);
+        double Pva_A = DiracOperator::p().radialIntegral(Fv0, FaA);
 
-        tvv += (1.0 / twojv) * std::abs(RME * RME) * std::abs(Pva * Pva);
+        tvv += (1.0 / Fv.twojp1()) * std::abs(RME * RME) * std::abs(Pva * Pva);
+        tvv_A += (1.0 / Fv0.twojp1()) * std::abs(RME_A * RME_A) *
+                 std::abs(Pva_A * Pva_A);
       }
-      tvv *= -1.0 * PhysConst::Hartree_MHz;
+      tvv *= -1.0;
+      tvv_A *= -1.0;
+      double MA = wf2s[i].Anuc() * PhysConst::u_NMU;
+      double MA_A = wf.Anuc() * PhysConst::u_NMU;
 
-      // Improve upon this mass measurement!
-      double MA = PhysConst::m_p * wf.Anuc();
+      double SMS_A = tvv_A * (MA_A / ((MA_A + 1) * (MA_A + 1)));
+      double SMS_A2 = tvv * (MA / ((MA + 1) * (MA + 1)));
 
-      // Currently testing first order, <v|T|v>
-      double SMS = tvv * (1.0 / 2.0) * MA / ((MA + 1) * (MA + 1));
-      double FS = dE - dE0;
+      double SMSv = SMS_A2 - SMS_A;
+      SMSv *= PhysConst::Hartree_MHz;
+
+      // Store ground state
+      if (j == 0) {
+        FS0 = FSv;
+        NMS0 = NMSv;
+        SMS0 = SMSv;
+        std::cout << "A   state        tvv        NMS        SMS        FS     "
+                     "    IS\n";
+      }
+
+      // IS parameters between excited and ground states
+      double FS = FS0 - FSv;
       double NMS = NMS0 - NMSv;
-
+      double SMS = SMS0 - SMSv;
       double IS = FS + NMS + SMS;
 
-      // Print IS between state and ground
-      printf(
-          "%3i %4s  %11.4e  %11.4f  %11.4f %11.4f %11.4f %11.4f %11.4f %11.4f "
-          "%11.4f % "
-          "11.4f\n",
-          wf2s.at(i).Anuc(), Fv.symbol().c_str(), drr, dE, F, FS, NMS, SMS, tvv,
-          IS, dE2, dE2 / drr);
+      fmt::print("{:3} {:4} {:11.4f} {:11.4f} {:11.4f} {:11.4f} {:11.4f}\n",
+                 wf2s[i].Anuc(), Fv.symbol().c_str(), tvv, NMS, SMS, FS,
+                 NMS + SMS + FS);
+      /*
+      printf("%3i %4s  %11.4e  %11.4f  %11.4f %11.4f %11.4f %11.4f %11.4f \n",
+             wf2s.at(i).Anuc(), Fv.symbol().c_str(), drr, dE, dE / drr, FS, NMS,
+             SMS, IS);
+      */
 
       // fmt::print("{:3}", wf2s.at(i).Anuc());
     }
@@ -276,7 +287,7 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     // Check that normal mass shift is small
   }
 
-  std::cout << "*IS does not include SMS yet.";
+  std::cout << "*SMS is only to first order.";
 }
 
 // Analytically evaluate the normal mass shift NMS in the relativitistic case
