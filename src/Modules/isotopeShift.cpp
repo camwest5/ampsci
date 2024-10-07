@@ -235,8 +235,8 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     std::cout
         << "\nIsotope shift parameters and energy contributions between A = "
         << wf.Anuc() << " and A':";
-    std::cout << "\nA'    state Knms (GHz amu) Ksms (GHz amu) F "
-                 "(MHz/fm^2) NMS (MHz) SMS* (MHz)    FS (MHz) IS to "
+    std::cout << "\nA'    state  Knms (GHz amu) Ksms (GHz amu) F "
+                 "(MHz/fm^2)     NMS (MHz)    SMS* (MHz)    FS (MHz) IS to "
               << wf.valence()[0].shortSymbol() << " (MHz)\n";
 
     for (auto j = 0ul; j < wf.valence().size(); j++) {
@@ -284,15 +284,15 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
       const auto SMS = SMSv[j] - SMS_ground;
       const auto IS = FS + NMS + SMS;
 
-      fmt::print("{:3}  {:4}  {:13.4f} {:13.4f} {:13.4f} {:9.4f} {:10.4f} "
-                 "{:11.4f} {:11.4f}\n",
+      fmt::print("{:3}  {:4}  {:14.4f} {:13.4f} {:13.4f} {:13.4f} {:13.4f} "
+                 "{:11.4f} {:15.4f}\n",
                  wf2s[i].Anuc(), Fv.symbol().c_str(), Knms[j], Ksms[j], F,
                  NMSv[j], SMSv[j], FSv, IS);
     }
-    std::cout << "*SMS is only to first order\n\nNote: "
-                 "NMS, SMS and FS are the differences between isotopes. "
-                 "\nSubtract between states to find isotope shifts.\n";
+    std::cout << "\n*SMS is only to first order";
   }
+  std::cout << "\n\nNote: NMS, SMS and FS are the differences between "
+               "isotopes. \nSubtract between states to find isotope shifts.\n";
 }
 
 // Analytically evaluate the normal mass shift NMS in the relativitistic case
