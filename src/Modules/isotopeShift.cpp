@@ -232,8 +232,10 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     double NMS_ground;
     double SMS_ground;
 
-    std::cout << "\nIsotope shift parameters and energy contributions:";
-    std::cout << "\nA     state  Knms (GHz amu) Ksms (GHz amu) F "
+    std::cout
+        << "\nIsotope shift parameters and energy contributions between A = "
+        << wf.Anuc() << " and A':";
+    std::cout << "\nA'    state Knms (GHz amu) Ksms (GHz amu) F "
                  "(MHz/fm^2) NMS (MHz) SMS* (MHz)    FS (MHz) IS to "
               << wf.valence()[0].shortSymbol() << " (MHz)\n";
 
