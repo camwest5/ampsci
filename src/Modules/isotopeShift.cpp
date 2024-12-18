@@ -141,7 +141,7 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     }
 
     new_input.merge("Atom{A = " + std::to_string(new_A) + ";}");
-    if (correlations == true) {
+    if (correlations == true && i == 0) {
       new_input.merge("Correlations{read = false; write = false;}");
     }
 
@@ -203,6 +203,8 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     }
     tvv *= -1.0;
 
+    // std::cout << "\n" << Fv.symbol() << " " << tvv;
+
     // In GHz amu
     Ksms[i] = tvv * PhysConst::Hartree_GHz / PhysConst::u_NMU;
 
@@ -215,18 +217,30 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
 
   // Find delta<r^2>
   const auto r0 = wf.get_rrms();
-
   for (int i = 0; i < wf2s.size(); i++) {
     const auto r2 = wf2s[i].get_rrms();
     const auto drr = r2 * r2 - r0 * r0;
 
     // Calculate field shift via <v|dV|v>
-    const DiracOperator::RadialF dV(wf.vnuc() - wf2s[i].vnuc());
+    const DiracOperator::RadialF dV(wf2s[i].vnuc() - wf.vnuc());
     ExternalField::TDHF tdhf(&dV, wf.vHF());
 
     std::cout << "\nCalculating field shift parameters for " << wf2s[i].atom()
-              << ":\n";
+              << ", r_rms = " << wf2s[i].get_rrms() << ":\n";
     tdhf.solve_core(0, 100, true);
+
+    // Mass shift contributions
+
+    // Artificial -1 * has been inserted to conform with Dzuba (2005), but I can't see why.
+    // Convention here is that all subtractions are: i - a, where a is reference.
+    // This yields a matching FS, but not NMS! Are their energies flipped?
+
+    // Normal mass shifts between A and A' for all states (in MHz)
+    const auto NMS =
+        -1 * Knms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
+
+    // Specific mass shifts between A and A' for all states (in MHz)
+    const auto SMS = Ksms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
 
     double FS_ground;
     double NMS_ground;
@@ -235,64 +249,58 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     std::cout
         << "\nIsotope shift parameters and energy contributions between A = "
         << wf.Anuc() << " and A':";
-    std::cout << "\nA'    state  Knms (GHz amu) Ksms (GHz amu)  F "
-                 "(MHz/fm^2)     NMS (MHz)    SMS* (MHz)    FS (MHz) IS to "
-              << wf.valence()[0].shortSymbol() << " (MHz)\n";
+    std::cout
+        << "\nA'   state          En (au) Knms (GHz amu) Ksms (GHz amu) "
+           "Fdir (MHz/fm^2) F (MHz/fm^2)     NMS (MHz)    SMS* (MHz)    FS "
+           "(MHz) IS to "
+        << wf.valence()[0].shortSymbol() << " (MHz)\n";
 
     for (auto j = 0ul; j < wf.valence().size(); j++) {
 
       const auto &Fv = wf.valence()[j];
 
-      /* 
       // Not currently using this approach - this determines dE just by taking the difference
       // Might be worth keeping for future reference
 
-      double dE = (Fv.en() - Fv.en()) * PhysConst::Hartree_MHz;
-      double F = dE / drr;
-      */
+      double dE =
+          (wf2s[i].valence()[j].en() - Fv.en()) *
+          PhysConst::Hartree_MHz; // check whether this is the right way round
+      double F_direct = dE / drr;
 
       // Field shift
       const auto factor = dV.rme3js(Fv.twoj(), Fv.twoj());
-      auto FSv = factor * (dV.reducedME(Fv, Fv) + tdhf.dV(Fv, Fv)) *
-                 PhysConst::Hartree_MHz;
+      auto FS = factor * (dV.reducedME(Fv, Fv) + tdhf.dV(Fv, Fv)) *
+                PhysConst::Hartree_MHz;
 
       // Normal mass shift - which energy should be used? This formula is from Dzuba (2005) and also Viatkina (2023) (where the negative is introduced)
 
       // Field shift parameter
-      double F = FSv / drr;
-
-      // Mass shift contributions
-
-      // In MHz
-      const auto NMSv =
-          Knms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
-
-      // In MHz
-      const auto SMSv =
-          Ksms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
+      double F = FS / drr;
 
       // Ground state parameters
       if (j == 0) {
-        FS_ground = FSv;
-        NMS_ground = NMSv[j];
-        SMS_ground = SMSv[j];
+        FS_ground = FS;
+        NMS_ground = NMS[j];
+        SMS_ground = SMS[j];
       }
 
       // IS parameters between excited and ground states
-      const auto FS = FSv - FS_ground;
-      const auto NMS = NMSv[j] - NMS_ground;
-      const auto SMS = SMSv[j] - SMS_ground;
-      const auto IS = FS + NMS + SMS;
+      const auto dFS = FS - FS_ground;
+      const auto dNMS = NMS[j] - NMS_ground;
+      const auto dSMS = SMS[j] - SMS_ground;
+      const auto IS = dFS + dNMS + dSMS;
 
-      fmt::print("{:3}  {:4}  {:14.4f} {:14.4f} {:13.4f} {:13.4f} {:13.4f} "
+      fmt::print("{:3} {:4} {:.13f} {:14.4f} {:14.4f} {:14.4f} {:13.4f} "
+                 "{:13.4f} {:13.4f} "
                  "{:11.4f} {:15.4f}\n",
-                 wf2s[i].Anuc(), Fv.symbol().c_str(), Knms[j], Ksms[j], F,
-                 NMSv[j], SMSv[j], FSv, IS);
+                 wf2s[i].Anuc(), Fv.symbol().c_str(), wf2s[i].valence()[j].en(),
+                 Knms[j], Ksms[j], F_direct, F, NMS[j], SMS[j], FS, IS);
     }
     std::cout << "\n*SMS is only to first order";
   }
   std::cout << "\n\nNote: NMS, SMS and FS are the differences between "
-               "isotopes. \nSubtract between states to find isotope shifts.\n";
+               "isotopes for each state. \nSubtract between states to find "
+               "contribution to isotope shifts, as in last column.\n";
 }
 
 // Analytically evaluate the normal mass shift NMS in the relativitistic case

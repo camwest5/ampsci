@@ -159,13 +159,16 @@ Wavefunction ampsci(const IO::InputBlock &input) {
         "include QED only into valence states, but not the core. Detailed QED "
         "options are set within the RadPot{} block - if that block is not set, "
         "defaults will be used. By default, this option is false, unless the "
-        "RadPot{} block exists, in which case it is true"}});
+        "RadPot{} block exists, in which case it is true"},
+       {"mass_shift",
+        "Include mass shift corrections? Either true or false. [false]"}});
 
   const auto core = input.get({"HartreeFock"}, "core", "[]"s);
   const auto HF_method = input.get({"HartreeFock"}, "method", "HartreeFock"s);
   const auto eps_HF = input.get({"HartreeFock"}, "eps", 1.0e-13);
   const auto x_Breit = input.get({"HartreeFock"}, "Breit", 0.0);
   const auto valence = input.get({"HartreeFock"}, "valence", ""s);
+  const auto mass_shift = input.get({"HartreeFock"}, "mass_shift", false);
 
   // Decide if to include QED into core+valence, just core, or not at all
   const auto qed_input = input.getBlock("RadPot");
@@ -180,7 +183,7 @@ Wavefunction ampsci(const IO::InputBlock &input) {
 
   // Set up the Hartree Fock potential/method (does not solve)
   // (Must set HF before adding RadPot - but must add RadPot before solving HF)
-  wf.set_HF(HF_method, x_Breit, core, eps_HF, true);
+  wf.set_HF(HF_method, x_Breit, mass_shift, core, eps_HF, true);
 
   // Forms QED radiative potential, if RadPot{} block is present.
   // Note: input options are parsed inside radiativePotential()

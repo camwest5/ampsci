@@ -120,14 +120,14 @@ Wavefunction::determineCore(const std::string &str_core_in)
 
 //==============================================================================
 void Wavefunction::set_HF(const std::string &method, const double x_Breit,
-                          const std::string &in_core, double eps_HF,
-                          bool print) {
+                          const bool mass_shift, const std::string &in_core,
+                          double eps_HF, bool print) {
 
   auto core = determineCore(in_core);
   const auto qed = std::nullopt; // we add QED (optionally) later - to allow for
                                  // QED into valence, but not core
-  m_HF = HF::HartreeFock(rgrid, m_vnuc, std::move(core), qed, m_alpha,
-                         HF::parseMethod(method), x_Breit, eps_HF);
+  m_HF = HF::HartreeFock(rgrid, m_vnuc, std::move(core), qed, m_alpha, Anuc(),
+                         HF::parseMethod(method), x_Breit, mass_shift, eps_HF);
 
   // Move this into HF?
   if (print) {
@@ -169,7 +169,7 @@ void Wavefunction::solve_core(bool print) {
 void Wavefunction::solve_core(const std::string &method, const double x_Breit,
                               const std::string &in_core, double eps_HF,
                               bool print) {
-  set_HF(method, x_Breit, in_core, eps_HF, print);
+  set_HF(method, x_Breit, false, in_core, eps_HF, print);
   solve_core(print);
 }
 

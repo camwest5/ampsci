@@ -75,7 +75,9 @@ private:
   std::vector<double> m_vnuc;
   std::optional<QED::RadPot> m_vrad;
   std::optional<HF::Breit> m_VBr;
-  double m_alpha;
+  bool m_mass_shift;
+  int m_alpha;
+  double m_Anuc;
   Method m_method;
   double m_eps_HF;
   std::vector<double> m_vdir;
@@ -109,9 +111,9 @@ public:
   HartreeFock(std::shared_ptr<const Grid> rgrid, std::vector<double> vnuc,
               std::vector<DiracSpinor> core,
               std::optional<QED::RadPot> vrad = std::nullopt,
-              double m_alpha = PhysConst::alpha,
+              double m_alpha = PhysConst::alpha, int m_Anuc = 0,
               Method method = Method::HartreeFock, double x_Breit = 0.0,
-              double eps_HF = 0.0,
+              bool mass_shift = false, double eps_HF = 0.0,
               Parametric::Type potential = Parametric::Type::Green,
               double H_g = 0.0, double d_t = 0.0);
 

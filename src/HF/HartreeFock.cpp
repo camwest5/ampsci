@@ -3,6 +3,7 @@
 #include "Coulomb/CoulombIntegrals.hpp"
 #include "Coulomb/YkTable.hpp"
 #include "DiracODE/DiracODE.hpp"
+#include "DiracOperator/Operators/p.hpp"
 #include "HF/Breit.hpp"
 #include "MBPT/CorrelationPotential.hpp"
 #include "Maths/Grid.hpp"
@@ -57,7 +58,8 @@ HartreeFock::HartreeFock(std::shared_ptr<const Grid> grid,
                          std::vector<double> vnuc,
                          std::vector<DiracSpinor> core,
                          std::optional<QED::RadPot> vrad, double alpha,
-                         Method method, double x_Breit, double in_eps,
+                         int Anuc, Method method, double x_Breit,
+                         bool mass_shift, double in_eps,
                          Parametric::Type potential, double H_g, double d_t)
     : m_rgrid(grid),
       m_core(std::move(core)),
@@ -69,7 +71,9 @@ HartreeFock::HartreeFock(std::shared_ptr<const Grid> grid,
       m_method(method),
       m_eps_HF(std::abs(in_eps) < 1.0 ? in_eps : std::pow(10, -in_eps)),
       m_vdir(m_rgrid->num_points(), 0.0),
-      m_Yab() {
+      m_Yab(),
+      m_mass_shift(mass_shift),
+      m_Anuc(Anuc) {
   set_parametric_potential(true, potential, H_g, d_t);
 }
 
@@ -455,10 +459,41 @@ EpsIts HartreeFock::hartree_fock_core() {
         v_nonlocal += VbrFa;
       }
 
+      /*if (m_mass_shift) {
+
+        const double M_A = m_Anuc * PhysConst::u_NMU;
+        const double mass_coef = M_A / ((M_A + 1) * (M_A + 1));
+
+        // Add specific mass shift t_aiia v_nonlocal and update energy guess
+        DiracSpinor VsmsFa(Fa.n(), Fa.kappa(), Fa.grid_sptr());
+
+        for (const auto &Fb : core_prev) {
+          const auto RMEs = Angular::Ck_kk(1, Fa.kappa(), Fb.kappa()) *
+                            Angular::Ck_kk(1, Fb.kappa(), Fa.kappa());
+
+          const auto Pba = DiracOperator::p().radialIntegral(Fb, Fa);
+          const auto Fb_eff = DiracOperator::p().radial_rhs(Fb.kappa(), Fb);
+
+          VsmsFa += 0.0 * RMEs * Pba * Fb_eff;
+        }
+
+        VsmsFa *= -mass_coef / (Fa.twojp1());
+
+        v_nonlocal += VsmsFa;
+        en += (Fzero * VsmsFa) / (Fa * Fzero);
+
+        //std::cout << "δE for " << Fa.shortSymbol() << " = " << dE
+        //          << "\t with relative difference " << (en - dE) / en << "%\n";
+
+        //en += (Fzero * VsmsFa) /
+        //(Fa * Fzero); // Shouldn't this be Fa_prev, not Fzero?
+      }*/
+
       // Solve HF Dirac equation for core state
       const auto &Hrad_ell = Hrad_el(Fa.l());
       const auto &Hmagl = Hmag(Fa.l());
       const auto &VlVr = qip::add(vl, Hrad_ell);
+
       hf_orbital_green(Fa, en, VlVr, Hmagl, v_nonlocal, core_prev, v0,
                        vBreit());
 
@@ -563,6 +598,23 @@ EpsIts HartreeFock::hf_valence(DiracSpinor &Fa,
     if (m_VBr) {
       VxFa += m_VBr->VbrFa(Fa, m_core);
     }
+    /*if (m_mass_shift) {
+      // Add specific mass shift t_aiia v_nonlocal and update energy guess
+      DiracSpinor VsmsFa(Fa.n(), Fa.kappa(), Fa.grid_sptr());
+
+      for (const auto &Fb : m_core) {
+        const auto RMEs = Angular::Ck_kk(1, Fa.kappa(), Fb.kappa()) *
+                          Angular::Ck_kk(1, Fb.kappa(), Fa.kappa());
+
+        const auto Pba = DiracOperator::p().radialIntegral(Fb, Fa);
+        const auto Fb_eff = DiracOperator::p().radial_rhs(Fb.kappa(), Fb);
+
+        VsmsFa += RMEs * Pba * Fb_eff;
+      }
+
+      VsmsFa *= -1.0 / (Fa.twojp1());
+      VxFa += VsmsFa;
+    }*/
     if (Sigma) {
       const auto f = prev_its && it < 15 ? it / 15.0 : 1.0;
       VxFa += f * Sigma->SigmaFv(Fa);
@@ -916,8 +968,8 @@ void HartreeFock::form_approx_vex_core_a(const DiracSpinor &Fa,
         for (std::size_t i = 0; i < irmax; i++) {
           vex_a[i] += Labk * (*vabk)[i] * v_Fab[i];
         } // r
-      }   // k
-    }     // b
+      } // k
+    } // b
   }
 
   // now, do a=b, ONLY if a is in the core!
@@ -940,7 +992,7 @@ void HartreeFock::form_approx_vex_core_a(const DiracSpinor &Fa,
         vex_a[i] += -Labk * (*vaak)[i] * x_tjap1;
       }
     } // k
-  }   // if a in core
+  } // if a in core
 }
 
 //------------------------------------------------------------------------------
@@ -999,8 +1051,8 @@ std::vector<double> vex_approx(const DiracSpinor &Fa,
           continue;
         vex[i] += tjs2 * vabk[i] * v_Fab[i];
       } // r
-    }   // k
-  }     // b
+    } // k
+  } // b
 
   return vex;
 }
