@@ -459,10 +459,11 @@ EpsIts HartreeFock::hartree_fock_core() {
         v_nonlocal += VbrFa;
       }
 
-      /*if (m_mass_shift) {
+      if (m_mass_shift) {
 
         const double M_A = m_Anuc * PhysConst::u_NMU;
-        const double mass_coef = M_A / ((M_A + 1) * (M_A + 1));
+        const double mass_coef =
+            M_A / ((M_A + 1) * (M_A + 1)); // Do I need a factor 1/2??
 
         // Add specific mass shift t_aiia v_nonlocal and update energy guess
         DiracSpinor VsmsFa(Fa.n(), Fa.kappa(), Fa.grid_sptr());
@@ -474,20 +475,14 @@ EpsIts HartreeFock::hartree_fock_core() {
           const auto Pba = DiracOperator::p().radialIntegral(Fb, Fa);
           const auto Fb_eff = DiracOperator::p().radial_rhs(Fb.kappa(), Fb);
 
-          VsmsFa += 0.0 * RMEs * Pba * Fb_eff;
+          VsmsFa += RMEs * Pba * Fb_eff;
         }
 
         VsmsFa *= -mass_coef / (Fa.twojp1());
 
         v_nonlocal += VsmsFa;
         en += (Fzero * VsmsFa) / (Fa * Fzero);
-
-        //std::cout << "δE for " << Fa.shortSymbol() << " = " << dE
-        //          << "\t with relative difference " << (en - dE) / en << "%\n";
-
-        //en += (Fzero * VsmsFa) /
-        //(Fa * Fzero); // Shouldn't this be Fa_prev, not Fzero?
-      }*/
+      }
 
       // Solve HF Dirac equation for core state
       const auto &Hrad_ell = Hrad_el(Fa.l());

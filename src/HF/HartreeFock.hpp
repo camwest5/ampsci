@@ -76,8 +76,8 @@ private:
   std::optional<QED::RadPot> m_vrad;
   std::optional<HF::Breit> m_VBr;
   bool m_mass_shift;
-  int m_alpha;
-  double m_Anuc;
+  double m_alpha;
+  int m_Anuc;
   Method m_method;
   double m_eps_HF;
   std::vector<double> m_vdir;
