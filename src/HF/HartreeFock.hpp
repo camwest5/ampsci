@@ -147,6 +147,13 @@ public:
   //! Breit interaction V_Br*Fa
   DiracSpinor VBr(const DiracSpinor &Fv) const;
 
+  //! Specific mass shift potential Vsms*Fa
+  DiracSpinor Vsms(const DiracSpinor &Fa,
+                   const std::vector<DiracSpinor> &current_core) const;
+
+  //! Normal mass shift correction
+  double normal_mass_shift(const DiracSpinor &Fa) const;
+
   //---------------------------
 
   //! Resturns a const reference to the radial grid

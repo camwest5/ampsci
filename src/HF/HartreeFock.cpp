@@ -460,26 +460,7 @@ EpsIts HartreeFock::hartree_fock_core() {
       }
 
       if (m_mass_shift) {
-
-        const double M_A = m_Anuc * PhysConst::u_NMU;
-        const double mass_coef =
-            M_A / ((M_A + 1) * (M_A + 1)); // Do I need a factor 1/2??
-
-        // Add specific mass shift t_aiia v_nonlocal and update energy guess
-        DiracSpinor VsmsFa(Fa.n(), Fa.kappa(), Fa.grid_sptr());
-
-        for (const auto &Fb : core_prev) {
-          const auto RMEs = Angular::Ck_kk(1, Fa.kappa(), Fb.kappa()) *
-                            Angular::Ck_kk(1, Fb.kappa(), Fa.kappa());
-
-          const auto Pba = DiracOperator::p().radialIntegral(Fb, Fa);
-          const auto Fb_eff = DiracOperator::p().radial_rhs(Fb.kappa(), Fb);
-
-          VsmsFa += RMEs * Pba * Fb_eff;
-        }
-
-        VsmsFa *= -mass_coef / (Fa.twojp1());
-
+        const auto VsmsFa = Vsms(Fa, core_prev);
         v_nonlocal += VsmsFa;
         en += (Fzero * VsmsFa) / (Fa * Fzero);
       }
@@ -514,6 +495,13 @@ EpsIts HartreeFock::hartree_fock_core() {
 
     vd_prev = m_vdir;
     update_vdir();
+  }
+
+  // Apply normal mass shift shift
+  if (m_mass_shift) {
+    for (auto &Fa : m_core) {
+      Fa.en() += normal_mass_shift(Fa);
+    }
   }
 
   return {eps, it, m_core[worst_index].shortSymbol()};
@@ -553,7 +541,7 @@ EpsIts HartreeFock::local_valence(DiracSpinor &Fa) const {
     if (converged || it == m_max_hf_its)
       break;
 
-    Fa = (1.0 - eta_damp) * Fa + eta_damp * Fa_prev;
+    Fa = -(1.0 - eta_damp) * Fa + eta_damp * Fa_prev;
     Fa.normalise();
   }
 
@@ -593,23 +581,9 @@ EpsIts HartreeFock::hf_valence(DiracSpinor &Fa,
     if (m_VBr) {
       VxFa += m_VBr->VbrFa(Fa, m_core);
     }
-    /*if (m_mass_shift) {
-      // Add specific mass shift t_aiia v_nonlocal and update energy guess
-      DiracSpinor VsmsFa(Fa.n(), Fa.kappa(), Fa.grid_sptr());
-
-      for (const auto &Fb : m_core) {
-        const auto RMEs = Angular::Ck_kk(1, Fa.kappa(), Fb.kappa()) *
-                          Angular::Ck_kk(1, Fb.kappa(), Fa.kappa());
-
-        const auto Pba = DiracOperator::p().radialIntegral(Fb, Fa);
-        const auto Fb_eff = DiracOperator::p().radial_rhs(Fb.kappa(), Fb);
-
-        VsmsFa += RMEs * Pba * Fb_eff;
-      }
-
-      VsmsFa *= -1.0 / (Fa.twojp1());
-      VxFa += VsmsFa;
-    }*/
+    if (m_mass_shift) {
+      VxFa += Vsms(Fa, m_core);
+    }
     if (Sigma) {
       const auto f = prev_its && it < 15 ? it / 15.0 : 1.0;
       VxFa += f * Sigma->SigmaFv(Fa);
@@ -628,6 +602,10 @@ EpsIts HartreeFock::hf_valence(DiracSpinor &Fa,
 
     Fa = (1.0 - eta_damp) * Fa + eta_damp * Fa_prev;
     Fa.normalise();
+  }
+  // Apply normal mass shift shift
+  if (m_mass_shift) {
+    Fa.en() += normal_mass_shift(Fa);
   }
 
   if (prev_its)
@@ -751,6 +729,43 @@ DiracSpinor HartreeFock::VBr(const DiracSpinor &Fv) const {
     return m_VBr->VbrFa(Fv, m_core);
   else
     return 0.0 * Fv;
+}
+
+//==============================================================================
+DiracSpinor
+HartreeFock::Vsms(const DiracSpinor &Fa,
+                  const std::vector<DiracSpinor> &current_core) const {
+  if (m_mass_shift) {
+    const double M_A = m_Anuc * PhysConst::u_NMU;
+    const double mass_coef = -0.5 * M_A / ((M_A + 1) * (M_A + 1));
+
+    // Add specific mass shift t_aiia v_nonlocal and update energy guess
+    DiracSpinor VsmsFa(Fa.n(), Fa.kappa(), Fa.grid_sptr());
+
+    for (const auto &Fb : current_core) {
+      const auto RME = std::abs(Angular::Ck_kk(1, Fa.kappa(), Fb.kappa()) *
+                                Angular::Ck_kk(1, Fb.kappa(), Fa.kappa()));
+
+      const auto Pba = DiracOperator::p().radialIntegral(Fb, Fa);
+      const auto Fb_eff = DiracOperator::p().radial_rhs(Fa.kappa(), Fb);
+
+      VsmsFa += RME * Pba * Fb_eff;
+    }
+
+    VsmsFa *= mass_coef / (Fa.twojp1());
+
+    return VsmsFa;
+  } else {
+    return Fa * 0.0;
+  }
+}
+
+//==============================================================================
+double HartreeFock::normal_mass_shift(const DiracSpinor &Fa) const {
+  //return -Fa.en() / (m_Anuc * PhysConst::u_NMU + 1);
+
+  // Currently broken! Not an issue here, but it's called twice when corrections are applied
+  return 0.0;
 }
 
 //==============================================================================
