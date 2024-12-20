@@ -170,20 +170,73 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
                "isotope\n  "
             << wf.atom() << " " << wf.nucleus() << "\n and the isotopes\n";
 
-  for (int i = 0; i < wf2s.size(); i++) {
-    std::cout << "  " << wf2s[i].atom() << " " << wf2s[i].nucleus() << "\n";
+  const auto r0 = wf.get_rrms();
+
+  for (const auto wf2 : wf2s) {
+
+    // Calculate field shift via operator method (can't use ΔE since SMS is indistinguishable)
+    const auto r2 = wf2.get_rrms();
+    const auto drr = r2 * r2 - r0 * r0;
+
+    // Calculate field shift via <v|dV|v>
+    const DiracOperator::RadialF dV(wf2.vnuc() - wf.vnuc());
+    ExternalField::TDHF tdhf(&dV, wf.vHF());
+    std::cout << "\nCalculating field shift parameters for " << wf2.atom()
+              << ", r_rms = " << wf2.get_rrms() << ":\n";
+    tdhf.solve_core(0, 100, true);
+
+    std::cout << "  " << wf2.atom() << " " << wf2.nucleus() << "\n";
+    std::cout << "\nA'   state          En (au)       ΔE (MHz)      NMS (MHz)  "
+                 "    SMS (MHz)       FS (MHz)  IS to "
+              << wf.valence()[0].shortSymbol() << " (MHz)\n";
+
+    for (auto i = 0ul; i < wf2.valence().size(); ++i) {
+      const auto &Fv0 = wf.valence()[i];
+      const auto &Fv2 = wf2.valence()[i];
+
+      // Apply normal mass shift (currently *0.0 in HartreeFock.cpp)
+      const auto NMS0 = -Fv0.en() / (wf.Anuc() * PhysConst::u_NMU + 1);
+      const auto NMS2 = -Fv2.en() / (wf2.Anuc() * PhysConst::u_NMU + 1);
+
+      // Find field shift - default included at HF level
+      const auto factor = dV.rme3js(Fv0.twoj(), Fv0.twoj());
+      auto FS = factor * (dV.reducedME(Fv0, Fv0) + tdhf.dV(Fv0, Fv0)) *
+                PhysConst::Hartree_MHz;
+
+      const auto E0 = Fv0.en() + NMS0;
+      const auto E2 = Fv2.en() + NMS2;
+
+      const auto dE = E2 - E0;
+
+      double dE_ground;
+
+      if (i == 0) {
+        dE_ground = dE;
+      }
+
+      const auto IS_to_ground = (dE - dE_ground) * PhysConst::Hartree_MHz;
+      const auto NMS = (NMS2 - NMS0) * PhysConst::Hartree_MHz;
+      const auto SMS = (Fv2.en() - Fv0.en()) * PhysConst::Hartree_MHz - FS;
+
+      fmt::print(
+          "{:3} {:4} {:.13f} {:14.4f} {:14.4f} {:14.4f} {:14.4f} {:16.4f}\n",
+          wf2.Anuc(), Fv2.symbol().c_str(), E2, dE * PhysConst::Hartree_MHz,
+          NMS, SMS, FS, IS_to_ground);
+    }
   }
 
+  /*
   //std::cout << "\nA               del(r^2)     dE (MHz) F (MHz/fm^2)    "
   //        << "FS (MHz)   NMS (MHz)  SMS* (MHz)   IS (MHz)\n";
 
   // Find mass shift constants for all valence states using reference isotope
-  std::vector<double> Ksms(wf.valence().size());
+  // std::vector<double> Ksms(wf.valence().size());
   std::vector<double> Knms(wf.valence().size());
 
   for (auto i = 0ul; i < wf.valence().size(); i++) {
     const auto &Fv = wf.valence()[i];
 
+    
     // Specific mass shift - currently first order, <v|T|v> = tvv
     double tvv = 0;
 
@@ -207,6 +260,7 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
 
     // In GHz amu
     Ksms[i] = tvv * PhysConst::Hartree_GHz / PhysConst::u_NMU;
+    
 
     // Normal mass shift
     // In GHz amu
@@ -240,7 +294,7 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
         -1 * Knms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
 
     // Specific mass shifts between A and A' for all states (in MHz)
-    const auto SMS = Ksms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
+    //const auto SMS = Ksms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
 
     double FS_ground;
     double NMS_ground;
@@ -301,6 +355,8 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   std::cout << "\n\nNote: NMS, SMS and FS are the differences between "
                "isotopes for each state. \nSubtract between states to find "
                "contribution to isotope shifts, as in last column.\n";
+
+  */
 }
 
 // Analytically evaluate the normal mass shift NMS in the relativitistic case
