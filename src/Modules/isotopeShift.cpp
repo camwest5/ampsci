@@ -172,6 +172,12 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const auto r0 = wf.get_rrms();
 
+  // Each constant estimate for each state for each isotope (state<isotope<constant>>)
+  // Will take mean for each state at the end
+  std::vector<std::vector<double>> F(wf.valence().size());
+  std::vector<std::vector<double>> Ksms(wf.valence().size());
+  std::vector<std::vector<double>> Knms(wf.valence().size());
+
   for (const auto wf2 : wf2s) {
 
     // Calculate field shift via operator method (can't use ΔE since SMS is indistinguishable)
@@ -189,7 +195,6 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     std::cout << "\nA'   state          En (au)       ΔE (MHz)      NMS (MHz)  "
                  "    SMS (MHz)       FS (MHz)  IS to "
               << wf.valence()[0].shortSymbol() << " (MHz)\n";
-
     for (auto i = 0ul; i < wf2.valence().size(); ++i) {
       const auto &Fv0 = wf.valence()[i];
       const auto &Fv2 = wf2.valence()[i];
@@ -218,11 +223,44 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
       const auto NMS = (NMS2 - NMS0) * PhysConst::Hartree_MHz;
       const auto SMS = (Fv2.en() - Fv0.en()) * PhysConst::Hartree_MHz - FS;
 
+      Ksms[i].push_back((SMS / 1000) /
+                        ((1.0 / wf2.Anuc()) - (1.0 / wf.Anuc())));
+
+      Knms[i].push_back((NMS / 1000) /
+                        ((1.0 / (wf2.Anuc())) - (1.0 / (wf.Anuc()))));
+
+      F[i].push_back(FS / drr);
+
       fmt::print(
           "{:3} {:4} {:.13f} {:14.4f} {:14.4f} {:14.4f} {:14.4f} {:16.4f}\n",
           wf2.Anuc(), Fv2.symbol().c_str(), E2, dE * PhysConst::Hartree_MHz,
           NMS, SMS, FS, IS_to_ground);
     }
+  }
+
+  std::cout << "\nMass and field shift constants for " << wf.atomicSymbol()
+            << "\n\n";
+  std::cout << " state Knms (GHz amu) Ksms (GHz amu)   F (MHz/fm^2)\n";
+
+  // Average and print out constants
+  for (auto i = 0ul; i < wf.valence().size(); ++i) {
+    const auto Knms_avg =
+        std::accumulate(Knms[i].begin(), Knms[i].end(), 0.0) / Knms[i].size();
+    const auto Knms_range = std::max_element(Knms[i].begin(), Knms[i].end()) -
+                            std::min_element(Knms[i].begin(), Knms[i].end());
+
+    const auto Ksms_avg =
+        std::accumulate(Ksms[i].begin(), Ksms[i].end(), 0.0) / Ksms[i].size();
+    const auto Ksms_range = std::max_element(Ksms[i].begin(), Ksms[i].end()) -
+                            std::min_element(Ksms[i].begin(), Ksms[i].end());
+
+    const auto F_avg =
+        std::accumulate(F[i].begin(), F[i].end(), 0.0) / F[i].size();
+    const auto F_range = std::max_element(F[i].begin(), F[i].end()) -
+                         std::min_element(F[i].begin(), F[i].end());
+
+    fmt::print("{:6} {:14.4f} {:14.4f} {:14.4f}\n",
+               wf.valence()[i].symbol().c_str(), Knms_avg, Ksms_avg, F_avg);
   }
 
   /*
