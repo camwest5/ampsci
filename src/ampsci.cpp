@@ -394,10 +394,22 @@ Wavefunction ampsci(const IO::InputBlock &input) {
   // Read/write Sigma to file:
   auto sigma_write = input.get({"Correlations"}, "write", ""s);
   // By default,  try to  read  from  write  file  (if it exists)
-  const auto sigma_read = input.get({"Correlations"}, "read", sigma_write);
+  auto sigma_read = input.get({"Correlations"}, "read", sigma_write);
   // don't  write to default filename when reading from another file
   if (sigma_read != "" && sigma_write == "")
     sigma_write = "false";
+
+  // Don't read/write from file if using mass_shift, overwrite user
+  if (mass_shift == true && sigma_write != "false") {
+    sigma_write = "false";
+    std::cout
+        << "\nWARNING: sigma_write set to 'false' because mass_shift = true\n";
+  }
+  if (mass_shift == true && sigma_read != "false") {
+    sigma_read = "false";
+    std::cout
+        << "WARNING:  sigma_read set to 'false' because mass_shift = true\n";
+  }
 
   // To fit Sigma to energies:
   // (nb: energies given in cm^-1, convert to au on input)

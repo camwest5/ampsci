@@ -119,13 +119,13 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 
   const auto A2 = input.get<int>("A2");
-  const bool correlations = input.get<bool>("new_correlations", true);
   const int range = input.get<int>("plusminus", 0);
 
   // Read original input file again, much like in main()
   auto new_input =
       IO::InputBlock("ampsci", input.path(), std::fstream(input.path()));
 
+  const auto mass_shift = new_input.get({"HartreeFock"}, "mass_shift", false);
   // Create range of As
   auto wf2s_size =
       std::abs(wf.Anuc() - A2.value()) > range ? range * 2 + 1 : range * 2;
@@ -141,9 +141,6 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     }
 
     new_input.merge("Atom{A = " + std::to_string(new_A) + ";}");
-    if (correlations == true && i == 0) {
-      new_input.merge("Correlations{read = false; write = false;}");
-    }
 
     // Currently just adds new_A without removing previous. OK because it reads the last,
     // but would be safer to remove original
@@ -175,6 +172,7 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
   // Each constant estimate for each state for each isotope (state<isotope<constant>>)
   // Will take mean for each state at the end
   std::vector<std::vector<double>> F(wf.valence().size());
+  std::vector<std::vector<double>> Fdir(wf.valence().size());
   std::vector<std::vector<double>> Ksms(wf.valence().size());
   std::vector<std::vector<double>> Knms(wf.valence().size());
 
@@ -200,8 +198,9 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
       const auto &Fv2 = wf2.valence()[i];
 
       // Apply normal mass shift (currently *0.0 in HartreeFock.cpp)
-      const auto NMS0 = -Fv0.en() / (wf.Anuc() * PhysConst::u_NMU + 1);
-      const auto NMS2 = -Fv2.en() / (wf2.Anuc() * PhysConst::u_NMU + 1);
+      // Check sign - this looks consistent with Dzuba (2005)
+      const auto NMS0 = Fv0.en() / (wf.Anuc() * PhysConst::u_NMU + 1);
+      const auto NMS2 = Fv2.en() / (wf2.Anuc() * PhysConst::u_NMU + 1);
 
       // Find field shift - default included at HF level
       const auto factor = dV.rme3js(Fv0.twoj(), Fv0.twoj());
@@ -221,15 +220,45 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
 
       const auto IS_to_ground = (dE - dE_ground) * PhysConst::Hartree_MHz;
       const auto NMS = (NMS2 - NMS0) * PhysConst::Hartree_MHz;
-      const auto SMS = (Fv2.en() - Fv0.en()) * PhysConst::Hartree_MHz - FS;
+      double SMS;
 
-      Ksms[i].push_back((SMS / 1000) /
-                        ((1.0 / wf2.Anuc()) - (1.0 / wf.Anuc())));
+      if (mass_shift == true) {
+        SMS = (Fv2.en() - Fv0.en()) * PhysConst::Hartree_MHz - FS;
+        Ksms[i].push_back((SMS / 1000) /
+                          ((1.0 / wf2.Anuc()) - (1.0 / wf.Anuc())));
+
+      } else {
+        double tvv = 0;
+
+        // Sum over core states
+        for (auto k = 0ul; k < wf.core().size(); k++) {
+
+          // Does A0 and A2 wavefunctions at the same time for each state, but this is not efficient if running multiple isotopes (only need to do wf0 once).
+          auto Fa = wf.core()[k];
+
+          // Reduced matrix element <v||C^1||a>
+          double RME = Angular::Ck_kk(1, Fv0.kappa(), Fa.kappa());
+
+          // Doesn't include factor -i, not important here but note for future use
+          double Pva = DiracOperator::p().radialIntegral(Fv0, Fa);
+
+          tvv +=
+              (1.0 / Fv0.twojp1()) * std::abs(RME * RME) * std::abs(Pva * Pva);
+        }
+        tvv *= -1.0;
+
+        const auto current_Ksms =
+            tvv * PhysConst::Hartree_GHz / PhysConst::u_NMU;
+        Ksms[i].push_back(current_Ksms);
+        SMS =
+            current_Ksms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
+      }
 
       Knms[i].push_back((NMS / 1000) /
                         ((1.0 / (wf2.Anuc())) - (1.0 / (wf.Anuc()))));
 
       F[i].push_back(FS / drr);
+      Fdir[i].push_back((Fv2.en() - Fv0.en()) * PhysConst::Hartree_MHz / drr);
 
       fmt::print(
           "{:3} {:4} {:.13f} {:14.4f} {:14.4f} {:14.4f} {:14.4f} {:16.4f}\n",
@@ -240,7 +269,8 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
 
   std::cout << "\nMass and field shift constants for " << wf.atomicSymbol()
             << "\n\n";
-  std::cout << " state Knms (GHz amu) Ksms (GHz amu)   F (MHz/fm^2)\n";
+  std::cout << " state Knms (GHz amu) Ksms (GHz amu)   F (MHz/fm^2) ΔE/Δ<r^2> "
+               "(MHz/fm^2)\n";
 
   // Average and print out constants
   for (auto i = 0ul; i < wf.valence().size(); ++i) {
@@ -259,8 +289,20 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     const auto F_range = std::max_element(F[i].begin(), F[i].end()) -
                          std::min_element(F[i].begin(), F[i].end());
 
-    fmt::print("{:6} {:14.4f} {:14.4f} {:14.4f}\n",
-               wf.valence()[i].symbol().c_str(), Knms_avg, Ksms_avg, F_avg);
+    const auto Fdir_avg =
+        std::accumulate(Fdir[i].begin(), Fdir[i].end(), 0.0) / Fdir[i].size();
+    const auto Fdir_range = std::max_element(Fdir[i].begin(), Fdir[i].end()) -
+                            std::min_element(Fdir[i].begin(), Fdir[i].end());
+
+    fmt::print("{:6} {:14.4f} {:14.4f} {:14.4f} {:20.4f}\n",
+               wf.valence()[i].symbol().c_str(), Knms_avg, Ksms_avg, F_avg,
+               Fdir_avg);
+  }
+  if (mass_shift == false) {
+    std::cout << "\n*SMS and Ksms to first order only.\n";
+  } else {
+    std::cout << "\n*ΔE/Δ<r^2> calculations of F include SMS which may reduce "
+                 "accuracy.\n";
   }
 
   /*
