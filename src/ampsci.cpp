@@ -161,7 +161,9 @@ Wavefunction ampsci(const IO::InputBlock &input) {
         "defaults will be used. By default, this option is false, unless the "
         "RadPot{} block exists, in which case it is true"},
        {"mass_shift",
-        "Include mass shift corrections? Either true or false. [false]"}});
+        "Include mass shift corrections? Either true or false. If set to true "
+        "correlations will not read/write. [false]"},
+       {"Vee", "Include Vee? Either true or false. [false]"}});
 
   const auto core = input.get({"HartreeFock"}, "core", "[]"s);
   const auto HF_method = input.get({"HartreeFock"}, "method", "HartreeFock"s);
@@ -169,6 +171,7 @@ Wavefunction ampsci(const IO::InputBlock &input) {
   const auto x_Breit = input.get({"HartreeFock"}, "Breit", 0.0);
   const auto valence = input.get({"HartreeFock"}, "valence", ""s);
   const auto mass_shift = input.get({"HartreeFock"}, "mass_shift", false);
+  const auto Vee = input.get({"HartreeFock"}, "Vee", false);
 
   // Decide if to include QED into core+valence, just core, or not at all
   const auto qed_input = input.getBlock("RadPot");
@@ -183,7 +186,7 @@ Wavefunction ampsci(const IO::InputBlock &input) {
 
   // Set up the Hartree Fock potential/method (does not solve)
   // (Must set HF before adding RadPot - but must add RadPot before solving HF)
-  wf.set_HF(HF_method, x_Breit, mass_shift, core, eps_HF, true);
+  wf.set_HF(HF_method, x_Breit, mass_shift, Vee, core, eps_HF, true);
 
   // Forms QED radiative potential, if RadPot{} block is present.
   // Note: input options are parsed inside radiativePotential()
@@ -338,8 +341,8 @@ Wavefunction ampsci(const IO::InputBlock &input) {
         "Pair of comma-separated doubles: w0, wratio. Initial point, and "
         "ratio, for logarithimg Im(w) grid [0.01, 1.5]"},
        {"include_G", "Inlcude lower g-part into Sigma [false]"},
-       {"include_Breit",
-        "Inlcude Breit corrections into Sigma (only for 2nd order) [false]"}});
+       {"include_Breit", "Inlcude Breit corrections into Sigma (only for 2nd "
+                         "order) [false]"}});
 
   const bool do_brueckner = input.getBlock({"Correlations"}) != std::nullopt;
   const auto n_min_core = input.get({"Correlations"}, "n_min_core", 1);
@@ -402,8 +405,8 @@ Wavefunction ampsci(const IO::InputBlock &input) {
   // Don't read/write from file if using mass_shift, overwrite user
   if (mass_shift == true && sigma_write != "false") {
     sigma_write = "false";
-    std::cout
-        << "\nWARNING: sigma_write set to 'false' because mass_shift = true\n";
+    std::cout << "\nWARNING: sigma_write set to 'false' because mass_shift = "
+                 "true\n";
   }
   if (mass_shift == true && sigma_read != "false") {
     sigma_read = "false";

@@ -76,6 +76,7 @@ private:
   std::optional<QED::RadPot> m_vrad;
   std::optional<HF::Breit> m_VBr;
   bool m_mass_shift;
+  bool m_Vee;
   double m_alpha;
   int m_Anuc;
   Method m_method;
@@ -113,7 +114,7 @@ public:
               std::optional<QED::RadPot> vrad = std::nullopt,
               double m_alpha = PhysConst::alpha, int m_Anuc = 0,
               Method method = Method::HartreeFock, double x_Breit = 0.0,
-              bool mass_shift = false, double eps_HF = 0.0,
+              bool mass_shift = false, bool Vee = false, double eps_HF = 0.0,
               Parametric::Type potential = Parametric::Type::Green,
               double H_g = 0.0, double d_t = 0.0);
 
@@ -150,6 +151,10 @@ public:
   //! Specific mass shift potential Vsms*Fa
   DiracSpinor Vsms(const DiracSpinor &Fa,
                    const std::vector<DiracSpinor> &current_core) const;
+
+  //! Hypothetical electron-electron interaction potential Vee*Fa
+  DiracSpinor Vee(const DiracSpinor &Fa,
+                  const std::vector<DiracSpinor> &current_core) const;
 
   //! Normal mass shift correction
   double normal_mass_shift(const DiracSpinor &Fa) const;
