@@ -776,7 +776,14 @@ DiracSpinor
 HartreeFock::Vee(const DiracSpinor &Fa,
                  const std::vector<DiracSpinor> &current_core) const {
 
+  /*
+  // γ0γ5Fa
+  DiracSpinor g0g5Fa(Fa);
+  g0g5Fa.f() = Fa.g();
+  g0g5Fa.g() = -1.0 * Fa.f();
+
   return Fa * 0.0;
+  */
 }
 
 //==============================================================================
@@ -1219,6 +1226,8 @@ void HartreeFock::hf_orbital_green(
         VnlF_tilde += tVBr->VbrFa(dFa, static_core);
       if (Sigma)
         VnlF_tilde += (*Sigma)(dFa);
+      if (m_mass_shift)
+        VnlF_tilde += Vsms(dFa, static_core);
       if (!dv0.empty())
         VnlF_tilde += dv0 * dFa;
       // const auto SigmaF_tilde = Sigma(dFa);

@@ -17,6 +17,7 @@
 #include "Modules/qed.hpp"
 #include "Modules/runModules.hpp"
 #include "Modules/screeningFactors.hpp"
+#include "Modules/sps.hpp"
 #include "Modules/thirdOrder.hpp"
 
 #include <iostream>
@@ -64,8 +65,7 @@ static const std::vector<ModuleInfo> module_list{
      "Calculates field-shift constants (isotope shift)"},
     {"isotopeShift", &isotopeShift,
      "Calculates isotope shift with field and specific mass shift."},
-    {"massShift", &massShift,
-     "Calculates specific mass shift (isotope shift)"},
+    {"massShift", &massShift, "Calculates specific mass shift (isotope shift)"},
     {"QED", &QED, "QED corrections to energies/matrix elements"},
     {"Breit", &Breit, "Breit corrections to energies"},
     {"ladder", &ladder, "Calculates ladder diagrams and energy corrections"},
@@ -78,6 +78,7 @@ static const std::vector<ModuleInfo> module_list{
     {"pnc", &calculatePNC, "Calculates APV amplitudes"},
     {"muonPV", &muonPV, "For testing/playing with muonic PV"},
     {"VQE", &VQE, "For testing/playing with VQE method"},
+    {"sps", &sps, "Introduces scalar-pseudoscalar e-e interaction"},
 
     {"exampleModule", &exampleModule, "A short description of the module"}};
 
