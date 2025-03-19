@@ -39,19 +39,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   for (auto Fv : wf.valence()) {
     double Dv = 0;
 
-    for (auto Fn : wf.core()) {
-      if ((Fn.twoj() == Fv.twoj()) && (Fn != Fv)) {
-        // <v|d|n>
-        const auto d_vn = d_ab(wf.grid(), Fv, Fn);
-
-        // <n|V|v> = Σ_a (u_nava - u_anva)
-        const auto V_nv_core = V_nv(contact, wf.core(), Fv, Fn, y_sps, mu);
-
-        Dv += 2.0 * d_vn * V_nv_core / (Fv.en() - Fn.en());
-      }
-    }
-
-    for (auto Fn : wf.valence()) {
+    for (auto Fn : wf.basis()) {
       if ((Fn.twoj() == Fv.twoj()) && (Fn != Fv)) {
         // <v|d|n>
         const auto d_vn = d_ab(wf.grid(), Fv, Fn);
@@ -167,8 +155,8 @@ std::vector<double> Bk_ab(const double k, const double mu,
                           const DiracSpinor &Fa, const DiracSpinor &Fb) {
   const auto &gr = Fa.grid();
   const auto &r = gr.r();
-  const auto i0 = std::max(Fa.min_pt(), Fb.min_pt());
-  const auto imax = std::min(Fa.max_pt(), Fb.max_pt());
+  //const auto i0 = std::max(Fa.min_pt(), Fb.min_pt());
+  //const auto imax = std::min(Fa.max_pt(), Fb.max_pt());
 
   // Modified spherical Bessel functions
   std::vector<double> i_k(gr.size());
@@ -176,8 +164,8 @@ std::vector<double> Bk_ab(const double k, const double mu,
 
   for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
     const auto x = mu * r[i_gr];
-    i_k[i_gr] = std::sqrt(M_PI / (2.0 * x)) * gsl_sf_bessel_Inu(k + 0.5, x);
-    k_k[i_gr] = std::sqrt(2.0 / (M_PI * x)) * gsl_sf_bessel_Knu(k + 0.5, x);
+    i_k[i_gr] = mod_sph_bessel_i(k, x);
+    k_k[i_gr] = mod_sph_bessel_k(k, x);
 
     // For testing
     //i_k[i_gr] = 1.0;
@@ -188,16 +176,23 @@ std::vector<double> Bk_ab(const double k, const double mu,
   std::vector<double> result(gr.size());
 
   for (int i_mid = 0; i_mid < gr.size(); ++i_mid) {
-    const double lower_ff =
-        NumCalc::integrate(1.0, i0, i_mid, i_k, Fa.f(), Fb.f(), gr.drdu());
+    double lower_ff =
+        NumCalc::integrate(1.0, 0, i_mid, i_k, Fa.f(), Fb.f(), gr.drdu());
 
-    const double lower_gg =
-        NumCalc::integrate(1.0, i0, i_mid, i_k, Fa.g(), Fb.g(), gr.drdu());
+    double lower_gg =
+        NumCalc::integrate(1.0, 0, i_mid, i_k, Fa.g(), Fb.g(), gr.drdu());
 
-    const double upper_ff =
-        NumCalc::integrate(1.0, i_mid, imax, k_k, Fa.f(), Fb.f(), gr.drdu());
-    const double upper_gg =
-        NumCalc::integrate(1.0, i_mid, imax, k_k, Fa.g(), Fb.g(), gr.drdu());
+    // For r0 point
+    if (i_mid == 0) {
+      lower_ff = 0;
+      lower_gg = 0;
+    }
+
+    const double upper_ff = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
+                                               Fa.f(), Fb.f(), gr.drdu());
+
+    const double upper_gg = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
+                                               Fa.g(), Fb.g(), gr.drdu());
 
     result[i_mid] = (k_k[i_mid] * (lower_ff + lower_gg) +
                      i_k[i_mid] * (upper_ff + upper_gg)) *
@@ -213,6 +208,14 @@ DiracSpinor i_gamma_5(const DiracSpinor &Fa) {
   Fb.f() = (-1 * Fa).g();
   Fb.g() = Fa.f();
   return Fb;
+}
+
+double mod_sph_bessel_i(double n, double x) {
+  return std::sqrt(M_PI / (2.0 * x)) * gsl_sf_bessel_Inu(n + 0.5, x);
+}
+
+double mod_sph_bessel_k(double n, double x) {
+  return std::sqrt(2.0 / (M_PI * x)) * gsl_sf_bessel_Knu(n + 0.5, x);
 }
 
 void sps_testing(const Wavefunction &wf, const bool contact) {
@@ -249,51 +252,51 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   F1.f() = ones;
   F1.g() = ones;
 
-  if (contact) {
-    // Check R_abcd_contact
+  // Check R_abcd_contact
 
-    // R_aaaa = R_abab = R_abac = 0 due to γ5
-    const auto R_aaaa = R_abcd_contact(Fv0, Fv0, Fv0, Fv0);
-    const auto R_abab = R_abcd_contact(Fv0, Fv1, Fv0, Fv1);
-    const auto R_abac = R_abcd_contact(Fv0, Fv1, Fv0, Fa0);
-    const auto R_g1a1b = R_abcd_contact(i_gamma_5(F1), Fv0, F1, Fv1);
+  // R_aaaa = R_abab = R_abac = 0 due to γ5
+  const auto R_aaaa = R_abcd_contact(Fv0, Fv0, Fv0, Fv0);
+  const auto R_abab = R_abcd_contact(Fv0, Fv1, Fv0, Fv1);
+  const auto R_abac = R_abcd_contact(Fv0, Fv1, Fv0, Fa0);
+  const auto R_g1a1b = R_abcd_contact(i_gamma_5(F1), Fv0, F1, Fv1);
 
-    // R_(γ5*1)a1a = R_(γ5*a)1a1 = 1
-    const auto R_g1a1a = R_abcd_contact(i_gamma_5(F1), Fv0, F1, Fv0);
-    const auto R_ga1a1 = R_abcd_contact(i_gamma_5(Fv0), F1, Fv0, F1);
+  // R_(γ5*1)a1a = R_(γ5*a)1a1 = 1
+  const auto R_g1a1a = R_abcd_contact(i_gamma_5(F1), Fv0, F1, Fv0);
+  const auto R_ga1a1 = R_abcd_contact(i_gamma_5(Fv0), F1, Fv0, F1);
 
-    std::cout << "\nRadial contact integration orthonormality checks\nR_αααα = "
-              << R_aaaa << "\t=0?\nR_abab = " << R_abab
-              << "\t=0?\nR_abac = " << R_abac
-              << "\t=0?\nR_(γ1)a1b = " << R_g1a1b << "\t=0?\n"
-              << "R_(γ1)a1a = " << R_g1a1a << "\t=1?\nR_(γa)1a1 = " << R_ga1a1
-              << "\t=1?\n\n";
+  std::cout << "\nRadial contact approximation checks\nR_αααα = " << R_aaaa
+            << "\t=0?\nR_abab = " << R_abab << "\t=0?\nR_abac = " << R_abac
+            << "\t=0?\nR_(γ1)a1b = " << R_g1a1b << "\t=0?\n"
+            << "R_(γ1)a1a = " << R_g1a1a << "\t=1?\nR_(γa)1a1 = " << R_ga1a1
+            << "\t=1?\n\n";
 
-  } else {
-    // Bessel screening function checks
+  // Bessel screening function checks
 
-    // Bk_ab returns vector.
-    const auto B0_11 = Bk_ab(0.0, 1.0, Fv0, Fv0);
+  // Bk_ab returns vector.
+  const auto B0_11 = Bk_ab(0.0, 1.0, F1, F1);
 
-    // Check 10 values
-    std::cout << "\nBessel function integration checks with λ=0 and "
-                 "fa=fb=ga=gb=1\nr          f1   g1   numeric  analytic\n";
-    for (int i = 0; i < wf.grid().size();
-         i += std::round(wf.grid().size() / 20)) {
-      const auto ri = wf.grid().r(i);
-      const auto i0 = gsl_sf_bessel_Inu(0.0, ri);
-      const auto k0 = gsl_sf_bessel_Knu(0.0, ri);
+  // Check 10 values
+  std::cout << "Bessel function integration (Bλ_ab) checks with λ=0 and "
+               "(fafb + gagb) = 1 for all r\nr          f    g    numeric "
+               "analytic\n";
+  for (int i = 0; i < wf.grid().size();
+       i += std::round(wf.grid().size() / 10)) {
+    const auto ri = wf.grid().r(i);
+    const auto i0 = mod_sph_bessel_i(0.0, ri);
+    const auto k0 = mod_sph_bessel_k(0.0, ri);
 
-      const auto B0_11_actual =
-          k0 * gsl_sf_Shi(ri) - i0 * gsl_sf_expint_Ei(-ri);
+    const auto B0_11_actual =
+        k0 * (gsl_sf_Shi(ri) - gsl_sf_Shi(0.000001)) -
+        i0 * (gsl_sf_expint_Ei(-ri) - gsl_sf_expint_Ei(-150));
 
-      fmt::print("{:10.6f} {:4.2f} {:4.2f} {:4.2e} {:4.2f}\n", ri, F1.f(i),
-                 F1.g(i), B0_11[i], B0_11_actual);
-    }
+    fmt::print("{:10.6f} {:4.2f} {:4.2f} {:7.4f} {:7.4f}\n", ri, F1.f(i),
+               F1.g(i), B0_11[i], B0_11_actual);
   }
 
   // B0_11(r) = k0(r)\int_0^r dr' i0(r) + i0(r)\int_r^\infty dr' k0(r)
   // B0_11(r) = k0(r)Shi[r] - i0(r)Ei[-r]
+
+  // Check that Bessels are doing what I expect
 
   // Radial integral checks
 
