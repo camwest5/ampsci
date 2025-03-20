@@ -146,7 +146,8 @@ double R_abcd_contact(const DiracSpinor &Fa, const DiracSpinor &Fb,
   std::vector<double> integrand(gr.size());
   for (double i = 0; i < gr.size(); ++i) {
     integrand[i] = (Fa.f(i) * ig5_Fc.f(i) + Fa.g(i) * ig5_Fc.g(i)) *
-                   (Fb.f(i) * Fd.f(i) + Fb.g(i) * Fd.g(i));
+                   (Fb.f(i) * Fd.f(i) + Fb.g(i) * Fd.g(i)) /
+                   (gr.r(i) * gr.r(i));
   }
 
   const auto i0 = std::max(std::max(Fa.min_pt(), Fb.min_pt()),
@@ -156,7 +157,8 @@ double R_abcd_contact(const DiracSpinor &Fa, const DiracSpinor &Fb,
 
   // const auto df = NumCalc::derivative(integrand, gr.drdu(), gr.du());
 
-  return NumCalc::integrate(1.0, i0, imax, integrand, gr.drdu()) * gr.du();
+  return NumCalc::integrate(1.0, i0, imax, integrand, gr.drdu()) * gr.du() /
+         (16 * M_PI * M_PI);
 }
 
 double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
@@ -275,6 +277,24 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   const auto Fv1 = wf.valence()[1];
   const auto Fa0 = wf.core()[0];
   const auto Fa1 = wf.core()[1];
+  DiracSpinor F1(Fv0);
+  std::vector<double> ones(wf.grid().size(), 1.0 / std::sqrt(2.0));
+  F1.f() = ones;
+  F1.g() = ones;
+
+  std::cout << "\nRunning checks on the SPS module with the following "
+               "states\nname  state  κ   j\n"
+            << " Fv0 " << Fv0.symbol() << " " << Fv0.kappa() << " "
+            << Fv0.twoj() * 0.5 << "\n Fv1 " << Fv1.symbol() << " "
+            << Fv1.kappa() << " " << Fv1.twoj() * 0.5 << "\n Fa0 "
+            << Fa0.symbol() << " " << Fa0.kappa() << " " << Fa0.twoj() * 0.5
+            << "\n Fa1 " << Fa1.symbol() << " " << Fa1.kappa() << " "
+            << Fa1.twoj() * 0.5;
+
+  std::cout << "\nAnd the special states 'F1' with f = g = 1/sqrt(2) such that "
+               "F1*F1 = ff+gg "
+               "= 1,\n\tand 'γF1' where f = -g = 1/sqrt(2) such that γF1*F1 = "
+               "-fg+gf = 1.\n";
 
   // <v|d|v> - should be 0
   const auto vdv = d_ab(wf.grid(), Fv0, Fv0);
@@ -296,11 +316,6 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
             << "\t\t=0?\n<v0|d|v1> = " << v0dv1
             << "\t=<v1|d|v0>?\n<v1|d|v0> = " << v1dv0
             << "\t=<v0|d|v1>?\n<v0||d||v1> = " << z_ab << "\tif Fr, =5.144?\n";
-
-  DiracSpinor F1(Fv0);
-  std::vector<double> ones(wf.grid().size(), 1.0 / std::sqrt(2.0));
-  F1.f() = ones;
-  F1.g() = ones;
 
   // Check that the radial contact integral Rδ_abcd is returning expected orthonormality
 
@@ -383,21 +398,25 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // Compare contact approximation with large μ
 
   std::cout << "\nV_nv matrix elements method agreement check. \nFull "
-               "implementation should approach contact limit for μ>>0\n  mu"
-               " massless    full contact k0(150μ) i0(150μ)\n";
+               "implementation should approach massless limit for μ->0 and "
+               "contact limit for μ>>0\n      mu"
+               "     massless         full      contact k0(150μ) i0(150μ)\n";
 
-  const auto max_mu = 6.0;
+  const auto max_mu = 15.0;
   const auto V_v0v1_massless = V_nv(false, wf.core(), Fv0, Fv1, 1.0, 0.0);
+  const auto V_v0v1_contact = V_nv(true, wf.core(), Fv0, Fv1, 1.0, 150);
 
-  for (double mu = 0.0000001; mu < max_mu; mu += max_mu / 10) {
+  for (double mu = 0.000001; mu < max_mu; mu += max_mu / 1000) {
 
     const auto V_v0v1_full = V_nv(false, wf.core(), Fv0, Fv1, 1.0, mu);
-    const auto V_v0v1_contact = V_nv(true, wf.core(), Fv0, Fv1, 1.0, mu);
 
     const auto i0_max = mod_sph_bessel_i(0.0, mu * 150.0);
     const auto k0_max = mod_sph_bessel_k(0.0, mu * 150.0);
+    if (i0_max == 0 & k0_max == 0) {
+      break;
+    }
 
-    fmt::print("{:4.2f} {:8.4f} {:7.4f} {:7.4f} {:8.1e} {:8.1e}\n", mu,
+    fmt::print("{:8.6f} {:12.9f} {:12.9f} {:12.9f} {:8.1e} {:8.1e}\n", mu,
                V_v0v1_massless, V_v0v1_full, V_v0v1_contact, i0_max, k0_max);
   }
 
