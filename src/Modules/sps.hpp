@@ -16,6 +16,9 @@ double R_abcd_contact(const DiracSpinor &Fa, const DiracSpinor &Fb,
 double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
                const DiracSpinor &Fb, const DiracSpinor &Fc,
                const DiracSpinor &Fd);
+double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
+                        const DiracSpinor &Fb, const DiracSpinor &Fc,
+                        const DiracSpinor &Fd);
 std::vector<double> Bk_ab(const double k, const double mu,
                           const DiracSpinor &Fa, const DiracSpinor &Fb);
 double mod_sph_bessel_i(double n, double x);

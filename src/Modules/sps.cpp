@@ -82,7 +82,8 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
   for (auto Fa : core) {
     if (Fn.kappa() == -Fv.kappa()) {
       const auto R0_nava = contact == true ? R_abcd_contact(Fn, Fa, Fv, Fa) :
-                                             Rk_abcd(0, mu, Fn, Fa, Fv, Fa);
+                           mu == 0.0 ? Rk_abcd_massless(0, Fn, Fa, Fv, Fa) :
+                                       Rk_abcd(0, mu, Fn, Fa, Fv, Fa);
       u_nava += R0_nava * Fa.twojp1();
     }
 
@@ -95,7 +96,8 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
                             Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa()) *
                             Angular::Ck_kk(k, Fn.kappa(), Fa.kappa());
         const auto R_anva = contact == true ? R_abcd_contact(Fa, Fn, Fv, Fa) :
-                                              Rk_abcd(k, mu, Fa, Fn, Fv, Fa);
+                            mu == 0.0 ? Rk_abcd_massless(k, Fa, Fn, Fv, Fa) :
+                                        Rk_abcd(k, mu, Fa, Fn, Fv, Fa);
         u_anva += A_anva * R_anva;
       }
     }
@@ -155,6 +157,24 @@ double R_abcd_contact(const DiracSpinor &Fa, const DiracSpinor &Fb,
   // const auto df = NumCalc::derivative(integrand, gr.drdu(), gr.du());
 
   return NumCalc::integrate(1.0, i0, imax, integrand, gr.drdu()) * gr.du();
+}
+
+double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
+                        const DiracSpinor &Fb, const DiracSpinor &Fc,
+                        const DiracSpinor &Fd) {
+  const auto screening_function = Coulomb::yk_ab(k, Fb, Fd);
+
+  const auto ig5_Fc = i_gamma_5(Fc);
+
+  const auto Rff =
+      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), ig5_Fc.f(),
+                         screening_function, Fa.grid().drdu());
+
+  const auto Rgg =
+      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(), ig5_Fc.g(),
+                         screening_function, Fa.grid().drdu());
+
+  return (Rff + Rgg) * Fa.grid().du();
 }
 
 std::vector<double> Bk_ab(const double k, const double mu,
@@ -364,18 +384,21 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
 
   std::cout << "\nV_nv matrix elements method agreement check. \nFull "
                "implementation should approach contact limit for μ>>0\n  mu"
-               "   limit    full k0(150μ) i0(150μ)\n";
+               " massless    full contact k0(150μ) i0(150μ)\n";
 
   const auto max_mu = 6.0;
+  const auto V_v0v1_massless = V_nv(false, wf.core(), Fv0, Fv1, 1.0, 0.0);
+
   for (double mu = 0.0000001; mu < max_mu; mu += max_mu / 10) {
+
     const auto V_v0v1_full = V_nv(false, wf.core(), Fv0, Fv1, 1.0, mu);
     const auto V_v0v1_contact = V_nv(true, wf.core(), Fv0, Fv1, 1.0, mu);
 
     const auto i0_max = mod_sph_bessel_i(0.0, mu * 150.0);
     const auto k0_max = mod_sph_bessel_k(0.0, mu * 150.0);
 
-    fmt::print("{:4.2f} {:7.4f} {:7.4f} {:8.1e} {:8.1e}\n", mu, V_v0v1_contact,
-               V_v0v1_full, i0_max, k0_max);
+    fmt::print("{:4.2f} {:8.4f} {:7.4f} {:7.4f} {:8.1e} {:8.1e}\n", mu,
+               V_v0v1_massless, V_v0v1_full, V_v0v1_contact, i0_max, k0_max);
   }
 
   // Dv checks
