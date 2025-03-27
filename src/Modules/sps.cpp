@@ -17,6 +17,9 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   input.check({{"", "Introduces a new scalar-psuedoscalar electron-electron "
                     "interaction."},
                {"contact", "Consider μ->infty, i.e. a contact force [true]"},
+               {"min_mu", "Minimum mediator mass to consider [1e-6]"},
+               {"max_mu", "Maximum mediator mass to consider [20]"},
+               {"N_mu", "Number of masses to consider [100]"},
                {"test", "Run module testing [false]"}});
   // If we are just requesting 'help', don't run module:
   if (input.has_option("help")) {
@@ -26,6 +29,9 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   const auto e_handler = gsl_set_error_handler_off();
 
   const bool contact = input.get<bool>("contact", true);
+  const double min_mu = input.get<double>("min_mu", 1e-6);
+  const double max_mu = input.get<double>("max_mu", 20.0);
+  const double N_mu = input.get<double>("N_mu", 100.0);
 
   if (input.get<bool>("test", false) == true) {
     sps_testing(wf, contact);
@@ -33,12 +39,17 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 
   const double y_sps = 1;
+  const auto Fv = wf.valence()[0];
 
-  const double mu = contact == true ? 1 : 1;
+  std::cout << "\nAtomic electric dipole moment for the " << Fv.symbol()
+            << " state with S-PS interaction (mediator mass = μ).\nμ (m_e)   "
+               "      Dv   i0_max   k0_max\n";
 
-  std::cout << "Fv\tDv\n";
+  // Currently looks at one valence state - ground
+  for (double log_mu = log(min_mu); log_mu < log(max_mu);
+       log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
-  for (auto Fv : wf.valence()) {
+    const auto mu = std::exp(log_mu);
     double Dv = 0;
 
     for (auto Fn : wf.basis()) {
@@ -53,7 +64,10 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
       }
     }
 
-    std::cout << Fv.shortSymbol() << "\t" << Dv << "\n";
+    const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
+    const auto k0_max = mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
+
+    fmt::print("{:8.6f} {:8.6f} {:8.1e} {:8.1e}\n", mu, Dv, i0_max, k0_max);
   }
 
   gsl_set_error_handler(e_handler);
@@ -81,28 +95,35 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
 
   for (auto Fa : core) {
     if (Fn.kappa() == -Fv.kappa()) {
-      const auto R0_nava = contact == true ? R_abcd_contact(Fn, Fa, Fv, Fa) :
+      const auto R0_nava = contact == true ?
+                               R_abcd_contact(0, mu, Fn, Fa, Fv, Fa) :
                            mu == 0.0 ? Rk_abcd_massless(0, Fn, Fa, Fv, Fa) :
                                        Rk_abcd(0, mu, Fn, Fa, Fv, Fa);
       u_nava += R0_nava * Fa.twojp1();
     }
 
-    const int ja = 0.5 * Fa.twoj();
-    const int jv = 0.5 * Fv.twoj();
-
-    for (int k = std::abs(ja - jv); k <= ja + jv; ++k) {
-      if ((ja + jv + k) % 2 == 0) {
+    for (int twok = std::abs(Fa.twoj() - Fv.twoj());
+         twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
+      if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
+        const double k = 0.5 * twok;
         const auto A_anva = (2.0 * k + 1) *
                             Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa()) *
                             Angular::Ck_kk(k, Fn.kappa(), Fa.kappa());
-        const auto R_anva = contact == true ? R_abcd_contact(Fa, Fn, Fv, Fa) :
+        const auto R_anva = contact == true ?
+                                R_abcd_contact(k, mu, Fa, Fn, Fv, Fa) :
                             mu == 0.0 ? Rk_abcd_massless(k, Fa, Fn, Fv, Fa) :
                                         Rk_abcd(k, mu, Fa, Fn, Fv, Fa);
+        /* std::cout << "λ = " << k << "\tκa = " << Fa.kappa()
+                  << "\tja = " << Fa.twoj() * 0.5
+                  << "\tjv = " << Fv.twoj() * 0.5 << "\tFa = " << Fa.symbol()
+                  << "\n";
+        std::cout << "A_anva = " << A_anva << "\n"; */
         u_anva += A_anva * R_anva;
       }
     }
 
-    if ((jv - ja) % 2 == 1) {
+    if ((Fv.twoj() - Fa.twoj() - 2) % 4 == 0) {
+      // std::cout << "\n" << 0.5 * (Fv.twoj() - Fa.twoj()) << " is an odd number, right...?\n";
       u_anva *= -1.0;
     }
 
@@ -137,28 +158,103 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
   return (Rff + Rgg) * Fa.grid().du() * mu;
 }
 
-double R_abcd_contact(const DiracSpinor &Fa, const DiracSpinor &Fb,
-                      const DiracSpinor &Fc, const DiracSpinor &Fd) {
+double R_abcd_contact(const double k, const double mu, const DiracSpinor &Fa,
+                      const DiracSpinor &Fb, const DiracSpinor &Fc,
+                      const DiracSpinor &Fd) {
 
-  const auto ig5_Fc = i_gamma_5(Fc);
   const auto &gr = Fa.grid();
+  const auto &r = gr.r();
+  const auto ig5_Fc = i_gamma_5(Fc);
 
+  // Delta case
+  /*
   std::vector<double> integrand(gr.size());
-  for (double i = 0; i < gr.size(); ++i) {
-    integrand[i] = (Fa.f(i) * ig5_Fc.f(i) + Fa.g(i) * ig5_Fc.g(i)) *
-                   (Fb.f(i) * Fd.f(i) + Fb.g(i) * Fd.g(i)) /
-                   (gr.r(i) * gr.r(i));
+  for (int i = 0; i < gr.size(); ++i) {
+    integrand[i] =
+        (Fa.f(i) * ig5_Fc.f(i) + Fa.g(i) * ig5_Fc.g(i)) *
+        (Fb.f(i) * Fd.f(i) + Fb.g(i) * Fd.g(i)) /
+        (gr.r(i) * gr.r(i)); // Works better when just one r, but why...?
   }
 
-  const auto i0 = std::max(std::max(Fa.min_pt(), Fb.min_pt()),
-                           std::max(Fc.min_pt(), Fd.min_pt()));
-  const auto imax = std::min(std::min(Fa.max_pt(), Fb.max_pt()),
-                             std::min(Fc.max_pt(), Fd.max_pt()));
+  return NumCalc::integrate(1.0, 0, gr.size(), integrand, gr.drdu()) * gr.du() /
+         (2 * M_PI * M_PI * mu * mu);
+                        */
 
-  // const auto df = NumCalc::derivative(integrand, gr.drdu(), gr.du());
+  /* Bessel approx case */
 
-  return NumCalc::integrate(1.0, i0, imax, integrand, gr.drdu()) * gr.du() /
-         (16 * M_PI * M_PI);
+  //const auto i0 = std::max(Fa.min_pt(), Fb.min_pt());
+  //const auto imax = std::min(Fa.max_pt(), Fb.max_pt());
+
+  // Integrate
+  std::vector<double> result(gr.size());
+
+  //Slower, more stable way
+  std::vector<double> ik(gr.size());
+
+  for (int i_mid = 0; i_mid < gr.size(); ++i_mid) {
+    for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
+      ik[i_gr] = std::exp(-mu * std::abs(r[i_mid] - r[i_gr])) /
+                 (2 * mu * mu * r[i_gr] * r[i_mid]);
+    }
+    double B_ff =
+        NumCalc::integrate(1.0, 0, gr.size(), ik, Fb.f(), Fd.f(), gr.drdu());
+
+    double B_gg =
+        NumCalc::integrate(1.0, 0, gr.size(), ik, Fb.g(), Fd.g(), gr.drdu());
+
+    result[i_mid] = (B_ff + B_gg) * gr.du();
+  }
+
+  /* Faster, less stable way
+  std::vector<double> i_k(gr.size());
+  std::vector<double> k_k(gr.size());
+
+  for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
+    const auto x = mu * r[i_gr];
+    //i_k[i_gr] = mod_sph_bessel_i(k, x);
+    //k_k[i_gr] = mod_sph_bessel_k(k, x);
+
+    i_k[i_gr] = std::exp(x) / (2 * x);
+    k_k[i_gr] = std::exp(-x) / x;
+
+    // For testing
+    //i_k[i_gr] = 1.0;
+    //k_k[i_gr] = 1.0;
+  }
+
+  for (int i_mid = 0; i_mid < gr.size(); ++i_mid) {
+    double lower_ff =
+        NumCalc::integrate(1.0, 0, i_mid, i_k, Fb.f(), Fd.f(), gr.drdu());
+
+    double lower_gg =
+        NumCalc::integrate(1.0, 0, i_mid, i_k, Fb.g(), Fd.g(), gr.drdu());
+
+    // For r0 point
+    if (i_mid == 0) {
+      lower_ff = 0;
+      lower_gg = 0;
+    }
+
+    const double upper_ff = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
+                                               Fb.f(), Fd.f(), gr.drdu());
+
+    const double upper_gg = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
+                                               Fb.g(), Fd.g(), gr.drdu());
+
+    result[i_mid] = (k_k[i_mid] * (lower_ff + lower_gg) +
+                     i_k[i_mid] * (upper_ff + upper_gg)) *
+                    gr.du();
+  } */
+
+  const auto B_bd = result;
+
+  const auto Rff = NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(),
+                                      ig5_Fc.f(), B_bd, Fa.grid().drdu());
+
+  const auto Rgg = NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(),
+                                      ig5_Fc.g(), B_bd, Fa.grid().drdu());
+
+  return (Rff + Rgg) * Fa.grid().du() * mu;
 }
 
 double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
@@ -194,6 +290,9 @@ std::vector<double> Bk_ab(const double k, const double mu,
     const auto x = mu * r[i_gr];
     i_k[i_gr] = mod_sph_bessel_i(k, x);
     k_k[i_gr] = mod_sph_bessel_k(k, x);
+
+    //i_k[i_gr] = std::exp(x) / (2 * x);
+    //k_k[i_gr] = std::exp(-x) / x;
 
     // For testing
     //i_k[i_gr] = 1.0;
@@ -243,10 +342,15 @@ double mod_sph_bessel_i(double n, double x) {
   const int gsl_status = gsl_sf_bessel_Inu_e(n + 0.5, x, &i_k);
 
   if (gsl_status == GSL_SUCCESS) {
+    /*if (i_k.err / i_k.val > 0.01) {
+      std::cout << "\nWARNING: error in i_k greater than 1\%\ni_k = " << i_k.val
+                << " \u00b1 " << i_k.err << "\n";
+    }*/
     return std::sqrt(M_PI / (2.0 * x)) * i_k.val;
   } else if (gsl_status == GSL_EOVRFLW) {
     return 0.0;
   }
+
   std::cout << "Need GSL_SUCCESS = " << GSL_SUCCESS
             << " or GSL_EOVRFLW = " << GSL_EOVRFLW;
   std::cout << "\n\ngsl_status = " << gsl_status << "\n";
@@ -259,6 +363,11 @@ double mod_sph_bessel_k(double n, double x) {
   const int gsl_status = gsl_sf_bessel_Knu_e(n + 0.5, x, &k_k);
 
   if (gsl_status == GSL_SUCCESS) {
+    /*
+    if (k_k.err / k_k.val > 0.01) {
+      std::cout << "\nWARNING: error in i_k greater than 1\%\n " << k_k.val
+                << " \u00b1 " << k_k.err << "\n";
+    }*/
     return std::sqrt(2.0 / (M_PI * x)) * k_k.val;
   } else if (gsl_status == GSL_EUNDRFLW) {
     return 0.0;
@@ -320,14 +429,14 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // Check that the radial contact integral Rδ_abcd is returning expected orthonormality
 
   // R_aaaa = R_abab = R_abac = 0 due to γ5
-  const auto R_aaaa = R_abcd_contact(Fv0, Fv0, Fv0, Fv0);
-  const auto R_abab = R_abcd_contact(Fv0, Fv1, Fv0, Fv1);
-  const auto R_abac = R_abcd_contact(Fv0, Fv1, Fv0, Fa0);
-  const auto R_g1a1b = R_abcd_contact(i_gamma_5(F1), Fv0, F1, Fv1);
+  const auto R_aaaa = R_abcd_contact(0.0, 1.0, Fv0, Fv0, Fv0, Fv0);
+  const auto R_abab = R_abcd_contact(0.0, 1.0, Fv0, Fv1, Fv0, Fv1);
+  const auto R_abac = R_abcd_contact(0.0, 1.0, Fv0, Fv1, Fv0, Fa0);
+  const auto R_g1a1b = R_abcd_contact(0.0, 1.0, i_gamma_5(F1), Fv0, F1, Fv1);
 
   // R_(γ5*1)a1a = R_(γ5*a)1a1 = 1
-  const auto R_g1a1a = R_abcd_contact(i_gamma_5(F1), Fv0, F1, Fv0);
-  const auto R_ga1a1 = R_abcd_contact(i_gamma_5(Fv0), F1, Fv0, F1);
+  const auto R_g1a1a = R_abcd_contact(0.0, 1.0, i_gamma_5(F1), Fv0, F1, Fv0);
+  const auto R_ga1a1 = R_abcd_contact(0.0, 1.0, i_gamma_5(Fv0), F1, Fv0, F1);
 
   std::cout << "\nRadial contact approximation checks\nR_aaaa = " << R_aaaa
             << "\t=0?\nR_abab = " << R_abab << "\t=0?\nR_abac = " << R_abac
@@ -397,26 +506,30 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
 
   // Compare contact approximation with large μ
 
-  std::cout << "\nV_nv matrix elements method agreement check. \nFull "
-               "implementation should approach massless limit for μ->0 and "
-               "contact limit for μ>>0\n      mu"
-               "     massless         full      contact k0(150μ) i0(150μ)\n";
+  std::cout
+      << "\nV_nv matrix elements method agreement check. \nFull "
+         "implementation should approach massless limit for μ->0 and "
+         "contact limit for μ>>0\n      mu"
+         "     massless         full            contact i0(150μ) k0(150μ)\n";
 
-  const auto max_mu = 15.0;
+  const auto max_mu = 50.0;
+  const auto min_mu = 1e-6;
   const auto V_v0v1_massless = V_nv(false, wf.core(), Fv0, Fv1, 1.0, 0.0);
-  const auto V_v0v1_contact = V_nv(true, wf.core(), Fv0, Fv1, 1.0, 150);
 
-  for (double mu = 0.000001; mu < max_mu; mu += max_mu / 1000) {
+  for (double log_mu = log(min_mu); log_mu < log(max_mu);
+       log_mu += std::abs(log(max_mu) - log(min_mu)) / 200) {
+    const auto mu = exp(log_mu);
+    const auto V_v0v1_contact = V_nv(true, wf.core(), Fv0, Fv1, 1.0, mu);
 
-    const auto V_v0v1_full = V_nv(false, wf.core(), Fv0, Fv1, 1.0, mu);
+    auto V_v0v1_full = V_nv(false, wf.core(), Fv0, Fv1, 1.0, mu);
 
     const auto i0_max = mod_sph_bessel_i(0.0, mu * 150.0);
     const auto k0_max = mod_sph_bessel_k(0.0, mu * 150.0);
     if (i0_max == 0 & k0_max == 0) {
-      break;
+      V_v0v1_full = 0.0;
     }
 
-    fmt::print("{:8.6f} {:12.9f} {:12.9f} {:12.9f} {:8.1e} {:8.1e}\n", mu,
+    fmt::print("{:8.6f} {:12.9f} {:12.9f} {:18.9f} {:8.1e} {:8.1e}\n", mu,
                V_v0v1_massless, V_v0v1_full, V_v0v1_contact, i0_max, k0_max);
   }
 
