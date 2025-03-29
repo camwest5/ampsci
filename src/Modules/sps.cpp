@@ -30,7 +30,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const bool contact = input.get<bool>("contact", true);
   const double min_mu = input.get<double>("min_mu", 1e-6);
-  const double max_mu = input.get<double>("max_mu", 20.0);
+  const double max_mu = input.get<double>("max_mu", 100.0);
   const double N_mu = input.get<double>("N_mu", 100.0);
 
   if (input.get<bool>("test", false) == true) {
@@ -42,8 +42,8 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   const auto Fv = wf.valence()[0];
 
   std::cout << "\nAtomic electric dipole moment for the " << Fv.symbol()
-            << " state with S-PS interaction (mediator mass = μ).\nμ (m_e)   "
-               "      Dv   i0_max   k0_max\n";
+            << " state with S-PS interaction (mediator mass = μ).\n  μ (m_e)  "
+               "      Dv     i0_max     k0_max\n";
 
   // Currently looks at one valence state - ground
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
@@ -67,7 +67,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
     const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
 
-    fmt::print("{:8.6f} {:8.6f} {:8.1e} {:8.1e}\n", mu, Dv, i0_max, k0_max);
+    fmt::print("{:9.5f} {:9.5f} {:10.1e} {:10.1e}\n", mu, Dv, i0_max, k0_max);
   }
 
   gsl_set_error_handler(e_handler);
@@ -90,6 +90,7 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
             const DiracSpinor &Fv, const DiracSpinor &Fn, const double y,
             const double mu) {
 
+  // For safety
   if (Fv.twoj() != Fn.twoj()) {
     return 0.0;
   }
