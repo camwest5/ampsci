@@ -90,6 +90,10 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
             const DiracSpinor &Fv, const DiracSpinor &Fn, const double y,
             const double mu) {
 
+  if (Fv.twoj() != Fn.twoj()) {
+    return 0.0;
+  }
+
   auto u_nava = 0.0;
   auto u_anva = 0.0;
 
@@ -276,7 +280,7 @@ double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
       NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(), ig5_Fc.g(),
                          screening_function, Fa.grid().drdu());
 
-  return (Rff + Rgg) * Fa.grid().du();
+  return (Rff + Rgg) * Fa.grid().du() / (2 * k + 1);
 }
 
 std::vector<double> Bk_ab(const double k, const double mu,
@@ -385,17 +389,53 @@ double mod_sph_bessel_k(double n, double x) {
 
 void sps_testing(const Wavefunction &wf, const bool contact) {
 
-  // Check E1
-  const auto Fv0 = wf.valence()[0];
-  const auto Fv1 = wf.valence()[1];
-  const auto Fa0 = wf.core()[0];
-  const auto Fa1 = wf.core()[1];
+  if (wf.valence().size() < 2) {
+    std::cout << "\nERROR: Cannot run SPS testing with <2 valence states.\n";
+    return;
+  } else if (wf.core().size() < 2) {
+    std::cout << "\nERROR: Cannot run SPS testing with <2 core states.\n";
+    return;
+  }
 
+  // Pick Fv/a0 and Fv/a1 to be the lowest nκ n(-κ) pair of valence/core states
+
+  DiracSpinor Fv0(wf.valence()[0]);
+  DiracSpinor Fv1(wf.valence()[1]);
+  DiracSpinor Fa0(wf.core()[0]);
+  DiracSpinor Fa1(wf.core()[1]);
+
+  if (Fv0.kappa() != -Fv1.kappa()) {
+    bool flag = false;
+    for (int i = 0; i < wf.valence().size(); ++i) {
+      for (int j = 0; j < wf.valence().size(); ++j) {
+        Fv0 = wf.valence()[i];
+        Fv1 = wf.valence()[j];
+
+        if (Fv0.kappa() == -Fv1.kappa()) {
+          flag = true;
+          break;
+        }
+      }
+      if (flag == true) {
+        break;
+      }
+    }
+    if (flag == false) {
+      std::cout
+          << "\n ERROR: No valence states exist with nonzero V_nv. To run "
+             "testing, ensure that two valence states exist such that κ1 = "
+             "-κ2.\n";
+      return;
+    }
+  }
+
+  // Create spinor F1 satisfying (ff + gg) = 1 (i.e, f = g = 1/sqrt(2))
   DiracSpinor F1(Fv0);
   std::vector<double> ones(wf.grid().size(), 1.0 / std::sqrt(2.0));
   F1.f() = ones;
   F1.g() = ones;
 
+  // Create spinor Fr satisfying (ff + gg) = r^2 (i.e., f = g = r/sqrt(2))
   DiracSpinor Fr(F1);
 
   for (int i = 0; i < wf.grid().size(); ++i) {
@@ -415,7 +455,8 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   std::cout << "\nAnd the special states 'F1' with f = g = 1/sqrt(2) such that "
                "F1*F1 = ff+gg "
                "= 1,\n\tand 'γF1' where f = -g = 1/sqrt(2) such that γF1*F1 = "
-               "-fg+gf = 1.\n";
+               "-fg+gf = 1,\n\tand 'Fr' where f = g = r/sqrt(2) such that "
+               "Fr*Fr = ff+gg = r^2\n";
 
   // <v|d|v> - should be 0
   const auto vdv = d_ab(wf.grid(), Fv0, Fv0);
@@ -430,8 +471,6 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
       v0dv1 / (std::pow(-1.0, (Fv0.twoj() - 1) * 0.5) *
                Angular::threej_2(Fv0.twoj(), 2, Fv1.twoj(), -1, 0, 1));
 
-  // Check it's obeying angular selection rules?
-
   std::cout << "\nDipole operator checks for v0 = " << Fv0.symbol()
 
             << " and v1 = " << Fv1.symbol() << "\n<v0|d|v0> = " << vdv
@@ -445,7 +484,7 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   const auto R_aaaa = R_abcd_contact(1.0, Fv0, Fv0, Fv0, Fv0);
   const auto R_abab = R_abcd_contact(1.0, Fv0, Fv1, Fv0, Fv1);
   const auto R_abac = R_abcd_contact(1.0, Fv0, Fv1, Fv0, Fa0);
-  const auto R_g1a1b = R_abcd_contact(1.0, i_gamma_5(Fr), Fv0, Fr, Fv1);
+  const auto R_1a1b = R_abcd_contact(1.0, Fr, Fv0, Fr, Fv1);
 
   // Need another special function
 
@@ -455,7 +494,7 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
 
   std::cout << "\nRadial contact approximation checks\nR_aaaa = " << R_aaaa
             << "\t=0?\nR_abab = " << R_abab << "\t=0?\nR_abac = " << R_abac
-            << "\t=0?\nR_(γ1)a1b = " << R_g1a1b << "\t=0?\n"
+            << "\t=0?\nR_1a1b = " << R_1a1b << "\t=0?\n"
             << "R_(γ1)a1a = " << R_g1a1a << "\t=1?\nR_(γa)1a1 = " << R_ga1a1
             << "\t=1?\n\n";
 
@@ -499,7 +538,7 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   std::cout
       << "\nRadial function integration with λ=0 and (-fagc + fcga)=(fbfd "
          "+ gbgd)=1 for all r\nR0_(γ1)1111\t = "
-      << R0_g1111 << "Exact expression" << R0_g1111_manual
+      << R0_g1111 << "\nExact \t = " << R0_g1111_manual
       << "\nAre these equal?\n";
 
   // Check radial integral's orthonormality is as expected. Same as contact case
@@ -509,25 +548,61 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   const auto R1_aaaa = Rk_abcd(1.0, 1.0, Fv0, Fv0, Fv0, Fv0);
   const auto R1_abab = Rk_abcd(1.0, 1.0, Fv0, Fv1, Fv0, Fv1);
   const auto R1_abac = Rk_abcd(1.0, 1.0, Fv0, Fv1, Fv0, Fa0);
-  const auto R1_g1a1b = Rk_abcd(1.0, 1.0, i_gamma_5(F1), Fv0, F1, Fv1);
+  const auto R1_1a1b = Rk_abcd(1.0, 1.0, F1, Fv0, F1, Fv1);
 
   std::cout
       << "\nRadial integration orthonormality checks with λ = μ = 1\nR1_aaaa = "
       << R1_aaaa << "\t=0?\nR1_abab = " << R1_abab
-      << "\t=0?\nR1_abac = " << R1_abac << "\t=0?\nR1_(γ1)a1b = " << R1_g1a1b
+      << "\t=0?\nR1_abac = " << R1_abac << "\t=0?\nR1_1a1b = " << R1_1a1b
       << "\t=0?\n";
 
   // V_nv checks
 
   // Compare contact approximation with large μ
 
-  std::cout << "\nV_nv matrix elements method agreement check. \nFull "
-               "implementation should approach massless limit for μ->0 and "
-               "contact limit for μ>>0\n         mu"
-               "    massless        full     contact  i0(150μ)  k0(150μ)\n";
-
   const auto max_mu = 1000.0;
   const auto min_mu = 1e-6;
+
+  // Test ground with all core states
+  std::cout
+      << "\nTesting V_nv in limits for all valence |v> and basis |n> "
+         "states.\nShowing >10% discrepancies.\n\nFor the exact cases,\nμ->0 = "
+      << min_mu << "\nμ->∞ = " << max_mu;
+
+  std::cout << "\n\nCheck OK:\n|v>  κv   |n>  κn     massless exact (μ->0) "
+               " rel diff exact "
+               "(μ->∞)      contact  rel diff\n";
+
+  for (auto Fv : wf.valence()) {
+    for (auto Fn : wf.basis()) {
+      if (Fn.twoj() == Fv.twoj()) {
+        const auto V_massless = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0);
+        const auto V_exact_min = V_nv(false, wf.core(), Fv, Fn, 1.0, min_mu);
+        const auto V_exact_max = V_nv(false, wf.core(), Fv, Fn, 1.0, max_mu);
+        const auto V_contact = V_nv(true, wf.core(), Fv, Fn, 1.0, max_mu);
+
+        const auto diff_massless =
+            std::abs((V_massless - V_exact_min) / V_massless);
+        const auto diff_contact =
+            std::abs((V_contact - V_exact_max) / V_contact);
+
+        if ((diff_massless > 0.1) || (diff_contact > 0.1)) {
+          fmt::print("{:3s} {:3}  {:4s} {:3} {:12.3e} {:12.3e} {:9.3f} "
+                     "{:12.3e} {:12.3e} {:9.3f}\n",
+                     Fv.shortSymbol(), Fv.kappa(), Fn.shortSymbol(), Fn.kappa(),
+                     V_massless, V_exact_min, diff_massless, V_exact_max,
+                     V_contact, diff_contact);
+        }
+      }
+    }
+    std::cout << "\n";
+  }
+
+  std::cout << "\nCalculating V_nv matrix elements for range of μ for <"
+            << Fv1.symbol() << "|V|" << Fv0.symbol()
+            << ">\n         mu"
+               "    massless        full     contact  i0(150μ)  k0(150μ)\n";
+
   const auto V_v0v1_massless = V_nv(false, wf.core(), Fv0, Fv1, 1.0, 0.0);
 
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
@@ -546,8 +621,8 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
     fmt::print("{:11.6f}  {:10.3e}  {:10.3e}  {:10.3e}  {:8.1e}  {:8.1e}\n", mu,
                V_v0v1_massless, V_v0v1_full, V_v0v1_contact, i0_max, k0_max);
   }
-
-  // Dv checks
 }
+
+// Dv checks
 
 } // namespace Module
