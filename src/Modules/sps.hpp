@@ -11,7 +11,7 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
             const DiracSpinor &Fv, const DiracSpinor &Fn, const double y,
             const double mu);
 void sps(const IO::InputBlock &input, const Wavefunction &wf);
-double R_abcd_contact(const double k, const double mu, const DiracSpinor &Fa,
+double R_abcd_contact(const double mu, const DiracSpinor &Fa,
                       const DiracSpinor &Fb, const DiracSpinor &Fc,
                       const DiracSpinor &Fd);
 double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
