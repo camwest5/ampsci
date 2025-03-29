@@ -126,12 +126,7 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
       }
     }
 
-    if ((Fv.twoj() - Fa.twoj() - 2) % 4 == 0) {
-      // std::cout << "\n" << 0.5 * (Fv.twoj() - Fa.twoj()) << " is an odd number, right...?\n";
-      u_anva *= -1.0;
-    }
-
-    u_anva *= 1.0 / Fv.twojp1();
+    u_anva *= std::pow(-1.0, 0.5 * (Fv.twoj() - Fa.twoj())) / Fv.twojp1();
   }
 
   return (u_nava - u_anva) * y;
