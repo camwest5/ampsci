@@ -16,7 +16,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 
   input.check({{"", "Introduces a new scalar-psuedoscalar electron-electron "
                     "interaction."},
-               {"contact", "Consider μ->infty, i.e. a contact force [true]"},
+               {"contact", "Consider μ->infty, i.e. a contact force [false]"},
                {"min_mu", "Minimum mediator mass to consider [1e-6]"},
                {"max_mu", "Maximum mediator mass to consider [20]"},
                {"N_mu", "Number of masses to consider [100]"},
@@ -28,7 +28,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const auto e_handler = gsl_set_error_handler_off();
 
-  const bool contact = input.get<bool>("contact", true);
+  const bool contact = input.get<bool>("contact", false);
   const double min_mu = input.get<double>("min_mu", 1e-6);
   const double max_mu = input.get<double>("max_mu", 100.0);
   const double N_mu = input.get<double>("N_mu", 100.0);
@@ -41,9 +41,10 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   const double y_sps = 1;
   const auto Fv = wf.valence()[0];
 
-  std::cout << "\nAtomic electric dipole moment for the " << Fv.symbol()
-            << " state with S-PS interaction (mediator mass = μ).\n  μ (m_e)  "
-               "      Dv     i0_max     k0_max\n";
+  std::cout
+      << "\nAtomic electric dipole moment for the " << Fv.symbol()
+      << " state with S-PS interaction (mediator mass = μ).\n    μ (m_e)  "
+         "      Dv     i0_max     k0_max\n";
 
   // Currently looks at one valence state - ground
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
@@ -67,7 +68,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
     const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
 
-    fmt::print("{:9.5f} {:9.5f} {:10.1e} {:10.1e}\n", mu, Dv, i0_max, k0_max);
+    fmt::print("{:10.7f} {:9.5f} {:10.1e} {:10.1e}\n", mu, Dv, i0_max, k0_max);
   }
 
   gsl_set_error_handler(e_handler);
