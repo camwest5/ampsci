@@ -20,6 +20,8 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
                {"min_mu", "Minimum mediator mass to consider [1e-6]"},
                {"max_mu", "Maximum mediator mass to consider [20]"},
                {"N_mu", "Number of masses to consider [100]"},
+               {"n", "Principal quantum number for Dv [ground]"},
+               {"kappa", "Kappa for Dv [ground]"},
                {"test", "Run module testing [false]"}});
   // If we are just requesting 'help', don't run module:
   if (input.has_option("help")) {
@@ -29,8 +31,8 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   const auto e_handler = gsl_set_error_handler_off();
 
   const bool contact = input.get<bool>("contact", false);
-  const double min_mu = input.get<double>("min_mu", 1e-6);
-  const double max_mu = input.get<double>("max_mu", 100.0);
+  const double min_mu = input.get<double>("min_mu", 1.0e-4);
+  const double max_mu = input.get<double>("max_mu", 1.0e4);
   const double N_mu = input.get<double>("N_mu", 100.0);
 
   if (input.get<bool>("test", false) == true) {
@@ -38,13 +40,71 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
     return;
   }
 
-  const double y_sps = 1;
-  const auto Fv = wf.valence()[0];
+  int i_ground = 0;
+  double E_ground = wf.valence()[0].en();
 
-  std::cout
-      << "\nAtomic electric dipole moment for the " << Fv.symbol()
-      << " state with S-PS interaction (mediator mass = μ).\n    μ (m_e)  "
-         "      Dv     i0_max     k0_max\n";
+  // Find the ground state of the given valence states
+  for (int i = 1; i < wf.valence().size(); ++i) {
+    const double E_test = wf.valence()[i].en();
+
+    if (E_test < E_ground) {
+      E_ground = E_test;
+      i_ground = i;
+    }
+  }
+
+  const auto n_ground = wf.valence()[i_ground].n();
+  const auto kappa_ground = wf.valence()[i_ground].kappa();
+
+  const int v_n = input.get<int>("n", n_ground);
+  const int v_kappa = input.get<int>("kappa", kappa_ground);
+
+  const auto Fv = *wf.getState(v_n, v_kappa);
+
+  const double y_sps = 1;
+
+  // Check that limits agree
+
+  // Compare contact approximation with large μ
+
+  const auto test_max_mu = 1000.0;
+  const auto test_min_mu = 1e-6;
+
+  // Test ground with all core states
+  std::cout << "\nTesting V_nv in limits for all basis states |n> with valence "
+            << Fv.symbol()
+            << ".\nShowing >10% discrepancies.\n\nFor the exact "
+               "cases,\nμ->0 = "
+            << test_min_mu << "\nμ->∞ = " << test_max_mu;
+
+  std::cout << "\n\nCheck OK:\n|v>  κv   |n>  κn     massless exact (μ->0) "
+               " rel diff exact "
+               "(μ->∞)      contact  rel diff\n";
+
+  for (auto Fn : wf.basis()) {
+    if (Fn.twoj() == Fv.twoj()) {
+      const auto V_massless = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0);
+      const auto V_exact_min = V_nv(false, wf.core(), Fv, Fn, 1.0, test_min_mu);
+      const auto V_exact_max = V_nv(false, wf.core(), Fv, Fn, 1.0, test_max_mu);
+      const auto V_contact = V_nv(true, wf.core(), Fv, Fn, 1.0, test_max_mu);
+
+      const auto diff_massless =
+          std::abs((V_massless - V_exact_min) / V_massless);
+      const auto diff_contact = std::abs((V_contact - V_exact_max) / V_contact);
+
+      if ((diff_massless > 0.1) || (diff_contact > 0.1)) {
+        fmt::print("{:3s} {:3}  {:4s} {:3} {:12.3e} {:12.3e} {:9.3f} "
+                   "{:12.3e} {:12.3e} {:9.3f}\n",
+                   Fv.shortSymbol(), Fv.kappa(), Fn.shortSymbol(), Fn.kappa(),
+                   V_massless, V_exact_min, diff_massless, V_exact_max,
+                   V_contact, diff_contact);
+      }
+    }
+  }
+
+  std::cout << "\nAtomic EDM for " << Fv.symbol()
+            << " with S-PS interaction (mediator mass = μ).\n   μ (m_e) "
+               "         Dv     i0_max     k0_max\n";
 
   // Currently looks at one valence state - ground
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
@@ -68,9 +128,8 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
     const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
 
-    fmt::print("{:10.7f} {:9.5f} {:10.1e} {:10.1e}\n", mu, Dv, i0_max, k0_max);
+    fmt::print("{:10.4e} {:11.4e} {:10.1e} {:10.1e}\n", mu, Dv, i0_max, k0_max);
   }
-
   gsl_set_error_handler(e_handler);
 }
 
@@ -146,7 +205,7 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
 
   const auto screening_function = Bk_ab(k, mu, Fb, Fd);
 
-  const auto ig5_Fc = i_gamma_5(Fc);
+  const auto ig5_Fc = i_g0_g5(Fc);
 
   const auto Rff =
       NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), ig5_Fc.f(),
@@ -165,7 +224,7 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 
   const auto &gr = Fa.grid();
   const auto &r = gr.r();
-  const auto ig5_Fc = i_gamma_5(Fc);
+  const auto ig5_Fc = i_g0_g5(Fc);
 
   // Delta case
 
@@ -267,7 +326,7 @@ double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
                         const DiracSpinor &Fd) {
   const auto screening_function = Coulomb::yk_ab(k, Fb, Fd);
 
-  const auto ig5_Fc = i_gamma_5(Fc);
+  const auto ig5_Fc = i_g0_g5(Fc);
 
   const auto Rff =
       NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), ig5_Fc.f(),
@@ -334,11 +393,12 @@ std::vector<double> Bk_ab(const double k, const double mu,
   return result;
 }
 
-DiracSpinor i_gamma_5(const DiracSpinor &Fa) {
+DiracSpinor i_g0_g5(const DiracSpinor &Fa) {
   // Fb = i*γ5*Fa
+
   DiracSpinor Fb(Fa);
   Fb.f() = (-1 * Fa).g();
-  Fb.g() = Fa.f();
+  Fb.g() = (-1 * Fa).f();
   return Fb;
 }
 
@@ -355,7 +415,6 @@ double mod_sph_bessel_i(double n, double x) {
   } else if (gsl_status == GSL_EOVRFLW) {
     return 0.0;
   }
-
   std::cout << "Need GSL_SUCCESS = " << GSL_SUCCESS
             << " or GSL_EOVRFLW = " << GSL_EOVRFLW;
   std::cout << "\n\ngsl_status = " << gsl_status << "\n";
@@ -486,8 +545,8 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // Need another special function
 
   // R_(γ5*1)a1a = R_(γ5*a)1a1 = 1
-  const auto R_g1a1a = R_abcd_contact(1.0, i_gamma_5(Fr), Fv0, Fr, Fv0);
-  const auto R_ga1a1 = R_abcd_contact(1.0, i_gamma_5(Fv0), Fr, Fv0, Fr);
+  const auto R_g1a1a = R_abcd_contact(1.0, i_g0_g5(Fr), Fv0, Fr, Fv0);
+  const auto R_ga1a1 = R_abcd_contact(1.0, i_g0_g5(Fv0), Fr, Fv0, Fr);
 
   std::cout << "\nRadial contact approximation checks\nR_aaaa = " << R_aaaa
             << "\t=0?\nR_abab = " << R_abab << "\t=0?\nR_abac = " << R_abac
@@ -527,7 +586,7 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // With (-fagc + fcga) = (fbfd + gbgd) = 1, should have
   // R0_(γ1)111 = \int_0^inf B0_bd
 
-  const auto R0_g1111 = Rk_abcd(0.0, 1.0, i_gamma_5(F1), F1, F1, F1);
+  const auto R0_g1111 = Rk_abcd(0.0, 1.0, i_g0_g5(F1), F1, F1, F1);
   const auto R0_g1111_manual =
       NumCalc::integrate(1.0, 0.0, wf.grid().size(), B0_11, wf.grid().drdu()) *
       wf.grid().du();
