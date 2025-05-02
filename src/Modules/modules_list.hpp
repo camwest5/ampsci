@@ -5,6 +5,7 @@
 #include "Modules/Breit.hpp"
 #include "Modules/HFAnomaly.hpp"
 #include "Modules/VQE.hpp"
+#include "Modules/Vee.hpp"
 #include "Modules/basic.hpp"
 #include "Modules/exampleModule.hpp"
 #include "Modules/isotopeShift.hpp"
@@ -17,7 +18,6 @@
 #include "Modules/qed.hpp"
 #include "Modules/runModules.hpp"
 #include "Modules/screeningFactors.hpp"
-#include "Modules/sps.hpp"
 #include "Modules/thirdOrder.hpp"
 
 #include <iostream>
@@ -78,7 +78,7 @@ static const std::vector<ModuleInfo> module_list{
     {"pnc", &calculatePNC, "Calculates APV amplitudes"},
     {"muonPV", &muonPV, "For testing/playing with muonic PV"},
     {"VQE", &VQE, "For testing/playing with VQE method"},
-    {"sps", &sps, "Introduces scalar-pseudoscalar e-e interaction"},
+    {"Vee", &Vee, "Introduces scalar-pseudoscalar e-e interaction"},
 
     {"exampleModule", &exampleModule, "A short description of the module"}};
 
