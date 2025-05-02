@@ -145,13 +145,13 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     // Currently just adds new_A without removing previous. OK because it reads the last,
     // but would be safer to remove original
 
-    // Remove all modules
+    // Remove isotope shift module
     const auto blocks_copy = new_input.blocks();
 
     for (const auto block : blocks_copy) {
       auto name = block.name();
 
-      if (name.substr(0, 8) == "Module::") {
+      if (name == "Module::isotopeShift") {
         new_input.remove_block(name);
       }
     }
@@ -228,6 +228,42 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
                           ((1.0 / wf2.Anuc()) - (1.0 / wf.Anuc())));
 
       } else {
+
+        // Just do it with wf - it's ~'isotope independent'
+
+        // Approximations as in Viatkina
+        const double M_A0 = wf.Anuc() * PhysConst::u_NMU;
+        const double M_A2 = wf2.Anuc() * PhysConst::u_NMU;
+        const double mass_coef_0 = -0.5 * M_A0 / ((M_A0 + 1) * (M_A0 + 1));
+        const double mass_coef_2 = -0.5 * M_A2 / ((M_A2 + 1) * (M_A2 + 1));
+
+        // Add specific mass shift t_aiia v_nonlocal and update energy guess
+        DiracSpinor VsmsFv0(Fv0.n(), Fv0.kappa(), Fv0.grid_sptr());
+
+        for (const auto &Fa : wf.core()) {
+          const auto RME = std::abs(Angular::Ck_kk(1, Fv0.kappa(), Fa.kappa()) *
+                                    Angular::Ck_kk(1, Fa.kappa(), Fv0.kappa()));
+
+          const auto Pba = DiracOperator::p().radialIntegral(Fa, Fv0);
+          const auto Fb_eff = DiracOperator::p().radial_rhs(Fv0.kappa(), Fa);
+
+          VsmsFv0 += RME * Pba * Fb_eff;
+        }
+
+        auto current_Ksms = Fv0 * VsmsFv0 / Fv0.twojp1();
+
+        const auto SMS0 = mass_coef_0 * current_Ksms;
+        const auto SMS2 = mass_coef_2 * current_Ksms;
+        SMS = (SMS2 - SMS0) * 3609.49 * 1000;
+
+        //std::cout << "\n" << SMS << "\n";
+        //const auto current_Ksms =
+        //    mass_coef / (Fv0.twojp1()) * Fv0 * VsmsFv0 * PhysConst::Hartree_GHz;
+
+        Ksms[i].push_back(current_Ksms);
+        //        SMS = current_Ksms * 1000;
+
+        /*
         double tvv = 0;
 
         // Sum over core states
@@ -247,11 +283,12 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
         }
         tvv *= -1.0;
 
-        const auto current_Ksms =
-            tvv * PhysConst::Hartree_GHz / PhysConst::u_NMU;
+        current_Ksms = tvv * PhysConst::Hartree_GHz / PhysConst::u_NMU;
+
         Ksms[i].push_back(current_Ksms);
         SMS =
             current_Ksms * ((1.0 / wf2s[i].Anuc()) - (1.0 / wf.Anuc())) * 1000;
+            */
       }
 
       Knms[i].push_back((NMS / 1000) /
