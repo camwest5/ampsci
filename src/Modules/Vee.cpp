@@ -1,4 +1,4 @@
-#include "Modules/sps.hpp"
+#include "Modules/Vee.hpp"
 #include "Angular/Wigner369j.hpp"
 #include "DiracOperator/Operators/Ek.hpp"
 #include "IO/InputBlock.hpp"
@@ -12,10 +12,11 @@
 
 namespace Module {
 
-void sps(const IO::InputBlock &input, const Wavefunction &wf) {
-
-  input.check({{"", "Introduces a new scalar-psuedoscalar electron-electron "
+void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
+  input.check({{"", "Introduces a new electron-electron "
                     "interaction."},
+               {"type", "'sp' (scalar-pseudoscalar), 'ss' (scalar-scalar), "
+                        "'vv' (vector-vector) ['sp']"},
                {"contact", "Consider μ->infty, i.e. a contact force [false]"},
                {"min_mu", "Minimum mediator mass to consider [1e-6]"},
                {"max_mu", "Maximum mediator mass to consider [20]"},
@@ -23,12 +24,185 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
                {"n", "Principal quantum number for Dv [ground]"},
                {"kappa", "Kappa for Dv [ground]"},
                {"test", "Run module testing [false]"}});
+
   // If we are just requesting 'help', don't run module:
   if (input.has_option("help")) {
     return;
   }
-
   const auto e_handler = gsl_set_error_handler_off();
+
+  const std::string type = input.get<std::string>("type", "sp");
+
+  if (type == "sp" || type == "ps" || type == "sps") {
+    sps(input, wf);
+  } else if (type == "ss") {
+    ss(input, wf);
+  } else if (type == "vv") {
+    vv(input, wf);
+  } else {
+    std::cout << "\nERROR: 'type = " << type
+              << " is not valid. Ensure one of \n - 'sp' "
+                 "(scalar-pseudoscalar)\n - 'ss' (scalar-scalar)\n - 'vv' "
+                 "(vector-vector)\n is provided.";
+  }
+  gsl_set_error_handler(e_handler);
+}
+
+void ss(const IO::InputBlock &input, const Wavefunction &wf) {
+  // Get ground state
+  int i_ground = 0;
+  double E_ground = wf.valence()[0].en();
+  const double min_mu = input.get<double>("min_mu", 1.0e-4);
+  const double max_mu = input.get<double>("max_mu", 1.0e4);
+  const double N_mu = input.get<double>("N_mu", 100.0);
+
+  // Create second wavefunction
+
+  // Find the ground state of the given valence states
+  for (int i = 1; i < wf.valence().size(); ++i) {
+    const double E_test = wf.valence()[i].en();
+
+    if (E_test < E_ground) {
+      E_ground = E_test;
+      i_ground = i;
+    }
+  }
+
+  const auto n_ground = wf.valence()[i_ground].n();
+  const auto kappa_ground = wf.valence()[i_ground].kappa();
+
+  const int v_n = input.get<int>("n", n_ground);
+  const int v_kappa = input.get<int>("kappa", kappa_ground);
+
+  //const auto Fv = *wf.getState(v_n, v_kappa);
+  const auto Fv = wf.valence()[0];
+
+  // Loop through mus
+
+  std::cout
+      << "\nEnergy shift due to a new scalar-scalar "
+         "electron interaction (to first order).\nCalculating for the state "
+      << Fv.symbol() << " with mediator mass μ."
+      << "\n         μ    E (a.u.)   dE (a.u.)\n";
+  for (double mu = min_mu; mu <= max_mu; mu += (max_mu - min_mu) / 10.0) {
+    double dE = 0;
+
+    for (auto Fa : wf.core()) {
+      const auto R_vava = Rk_abcd_ss(0, mu, Fv, Fa, Fv, Fa);
+      const auto A_vava = Fa.twoj();
+
+      // Sum over |ja-jv| <= k <= ja+jv
+      auto R_vaav = 0;
+      auto A_vaav = 0;
+      for (int twok = std::abs(Fa.twoj() - Fv.twoj());
+           twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
+        if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
+          const int k = twok * 0.5;
+          R_vaav = Rk_abcd_ss(k, mu, Fv, Fa, Fa, Fv);
+
+          A_vaav = (2.0 * k + 1) * Angular::Ck_kk(k, Fv.kappa(), Fa.kappa()) *
+                   Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+        }
+        const double jv = Fa.twoj() * 0.5;
+        A_vaav *=
+            std::pow(-1.0, (Fv.twoj() - Fa.twoj()) * 0.5) / (2.0 * jv + 1);
+
+        const auto u_vava = R_vava * A_vava;
+        const auto u_vaav = R_vaav * A_vaav;
+
+        dE += u_vava - u_vaav;
+      }
+    }
+
+    fmt::print("{:10.4e} {:11.4e} {:11.4e}\n", mu, Fv.en(), dE);
+  }
+}
+
+void vv(const IO::InputBlock &input, const Wavefunction &wf) {
+  // Get ground state
+  int i_ground = 0;
+  double E_ground = wf.valence()[0].en();
+  const double min_mu = input.get<double>("min_mu", 1.0e-4);
+  const double max_mu = input.get<double>("max_mu", 1.0e4);
+  const double N_mu = input.get<double>("N_mu", 100.0);
+
+  // Find the ground state of the given valence states
+  for (int i = 1; i < wf.valence().size(); ++i) {
+    const double E_test = wf.valence()[i].en();
+
+    if (E_test < E_ground) {
+      E_ground = E_test;
+      i_ground = i;
+    }
+  }
+
+  const auto n_ground = wf.valence()[i_ground].n();
+  const auto kappa_ground = wf.valence()[i_ground].kappa();
+
+  const int v_n = input.get<int>("n", n_ground);
+  const int v_kappa = input.get<int>("kappa", kappa_ground);
+
+  const auto Fv = *wf.getState(v_n, v_kappa);
+
+  // Loop through mus
+
+  std::cout
+      << "\nEnergy shift due to a new vector-vector "
+         "electron interaction (to first order).\nCalculating for the state "
+      << Fv.symbol() << " with mediator mass μ."
+      << "\n         μ    E (a.u.)   dE (a.u.)\n";
+  for (double mu = min_mu; mu <= max_mu; mu += (max_mu - min_mu) / 10.0) {
+    double dE = 0;
+
+    for (auto Fa : wf.core()) {
+      const auto R_vava = Rk_abcd_vv(0, mu, Fv, Fa, Fv, Fa);
+      const auto A_vava = Fa.twoj();
+
+      // Sum over |ja-jv| <= k <= ja+jv
+      auto R_vaav = 0;
+      auto A_vaav = 0;
+      for (int twok = std::abs(Fa.twoj() - Fv.twoj());
+           twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
+        if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
+          const int k = twok * 0.5;
+          R_vaav = Rk_abcd_vv(k, mu, Fv, Fa, Fa, Fv);
+
+          A_vaav = (2.0 * k + 1) * Angular::Ck_kk(k, Fv.kappa(), Fa.kappa()) *
+                   Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+        }
+        const double jv = Fa.twoj() * 0.5;
+        A_vaav *=
+            std::pow(-1.0, (Fv.twoj() - Fa.twoj()) * 0.5) / (2.0 * jv + 1);
+
+        const auto u_vava = R_vava * A_vava;
+        const auto u_vaav = R_vaav * A_vaav;
+
+        dE += u_vava - u_vaav;
+      }
+    }
+
+    fmt::print("{:10.4e} {:11.4e} {:11.4e}\n", mu, Fv.en(), dE);
+  }
+}
+
+double Rk_abcd_ss(const double k, const double mu, const DiracSpinor &Fa,
+                  const DiracSpinor &Fb, const DiracSpinor &Fc,
+                  const DiracSpinor &Fd) {
+  // Modify so that they are correct when parsed to scalar-pseudoscalar Rk_abcd
+  const auto inv_ig5_Fc = -1.0 * g0(i_g0_g5(Fc));
+  return Rk_abcd(k, mu, Fa, Fb, inv_ig5_Fc, Fd);
+}
+
+double Rk_abcd_vv(const double k, const double mu, const DiracSpinor &Fa,
+                  const DiracSpinor &Fb, const DiracSpinor &Fc,
+                  const DiracSpinor &Fd) {
+  // Modify so that they are correct when parsed to scalar-pseudoscalar Rk_abcd
+  const auto inv_ig0g5_Fc = -1.0 * i_g0_g5(Fc);
+  const auto inv_g0_Fd = -1.0 * i_g0_g5(Fc);
+  return Rk_abcd(k, mu, Fa, Fb, inv_ig0g5_Fc, inv_g0_Fd);
+}
+
+void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const bool contact = input.get<bool>("contact", false);
   const double min_mu = input.get<double>("min_mu", 1.0e-4);
@@ -130,7 +304,6 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 
     fmt::print("{:10.4e} {:11.4e} {:10.1e} {:10.1e}\n", mu, Dv, i0_max, k0_max);
   }
-  gsl_set_error_handler(e_handler);
 }
 
 double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb) {
@@ -156,6 +329,7 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
   }
 
   auto u_nava = 0.0;
+  auto u_naav = 0.0;
   auto u_anva = 0.0;
 
   for (auto Fa : core) {
@@ -178,19 +352,33 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
                                 R_abcd_contact(mu, Fa, Fn, Fv, Fa) :
                             mu == 0.0 ? Rk_abcd_massless(k, Fa, Fn, Fv, Fa) :
                                         Rk_abcd(k, mu, Fa, Fn, Fv, Fa);
+
+        const auto A_naav = (2.0 * k + 1) *
+                            Angular::Ck_kk(k, Fn.kappa(), -Fa.kappa()) *
+                            Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+        const auto R_naav = contact == true ?
+                                R_abcd_contact(mu, Fn, Fa, Fa, Fv) :
+                            mu == 0.0 ? Rk_abcd_massless(k, Fn, Fa, Fa, Fv) :
+                                        Rk_abcd(k, mu, Fn, Fa, Fa, Fv);
+
         /* std::cout << "λ = " << k << "\tκa = " << Fa.kappa()
                   << "\tja = " << Fa.twoj() * 0.5
                   << "\tjv = " << Fv.twoj() * 0.5 << "\tFa = " << Fa.symbol()
                   << "\n";
         std::cout << "A_anva = " << A_anva << "\n"; */
+
         u_anva += A_anva * R_anva;
+        u_naav += A_naav * R_naav;
       }
     }
 
-    u_anva *= std::pow(-1.0, 0.5 * (Fv.twoj() - Fa.twoj())) / Fv.twojp1();
+    const auto phase =
+        std::pow(-1.0, 0.5 * (Fv.twoj() - Fa.twoj())) / Fv.twojp1();
+    u_naav *= phase;
+    u_anva *= phase;
   }
 
-  return (u_nava - u_anva) * y;
+  return (u_nava - u_naav - u_anva) * y;
 }
 
 double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
@@ -203,16 +391,16 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
   //const auto i0 = std::max(Fa.min_pt(), Fc.min_pt());
   //const auto imax = std::min(Fa.max_pt(), Fc.max_pt());
 
-  const auto screening_function = Bk_ab(k, mu, Fb, Fd);
+  const auto screening_function = Bk_ab(k, mu, Fb, g0(Fd));
 
-  const auto ig5_Fc = i_g0_g5(Fc);
+  const auto ig0g5_Fc = i_g0_g5(Fc);
 
   const auto Rff =
-      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), ig5_Fc.f(),
+      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), ig0g5_Fc.f(),
                          screening_function, Fa.grid().drdu());
 
   const auto Rgg =
-      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(), ig5_Fc.g(),
+      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(), ig0g5_Fc.g(),
                          screening_function, Fa.grid().drdu());
 
   return (Rff + Rgg) * Fa.grid().du() * mu;
@@ -224,15 +412,16 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 
   const auto &gr = Fa.grid();
   const auto &r = gr.r();
-  const auto ig5_Fc = i_g0_g5(Fc);
+  const auto ig0g5_Fc = i_g0_g5(Fc);
+  const auto g0_Fd = g0(Fd);
 
   // Delta case
 
   std::vector<double> integrand(gr.size());
 
   for (int i = 0; i < gr.size(); ++i) {
-    integrand[i] = (Fa.f(i) * ig5_Fc.f(i) + Fa.g(i) * ig5_Fc.g(i)) *
-                   (Fb.f(i) * Fd.f(i) + Fb.g(i) * Fd.g(i)) /
+    integrand[i] = (Fa.f(i) * ig0g5_Fc.f(i) + Fa.g(i) * ig0g5_Fc.g(i)) *
+                   (Fb.f(i) * g0_Fd.f(i) + Fb.g(i) * g0_Fd.g(i)) /
                    (gr.r(i) * gr.r(i));
   }
 
@@ -311,10 +500,10 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
   const auto B_bd = result;
 
   const auto Rff = NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(),
-                                      ig5_Fc.f(), B_bd, Fa.grid().drdu());
+                                      ig0g5_Fc.f(), B_bd, Fa.grid().drdu());
 
   const auto Rgg = NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(),
-                                      ig5_Fc.g(), B_bd, Fa.grid().drdu());
+                                      ig0g5_Fc.g(), B_bd, Fa.grid().drdu());
 
   return (Rff + Rgg) * Fa.grid().du() * mu;
 
@@ -324,16 +513,16 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
                         const DiracSpinor &Fb, const DiracSpinor &Fc,
                         const DiracSpinor &Fd) {
-  const auto screening_function = Coulomb::yk_ab(k, Fb, Fd);
+  const auto screening_function = Coulomb::yk_ab(k, Fb, g0(Fd));
 
-  const auto ig5_Fc = i_g0_g5(Fc);
+  const auto ig0g5_Fc = i_g0_g5(Fc);
 
   const auto Rff =
-      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), ig5_Fc.f(),
+      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), ig0g5_Fc.f(),
                          screening_function, Fa.grid().drdu());
 
   const auto Rgg =
-      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(), ig5_Fc.g(),
+      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(), ig0g5_Fc.g(),
                          screening_function, Fa.grid().drdu());
 
   return (Rff + Rgg) * Fa.grid().du() / (2 * k + 1);
@@ -393,12 +582,18 @@ std::vector<double> Bk_ab(const double k, const double mu,
   return result;
 }
 
+DiracSpinor g0(const DiracSpinor &Fa) {
+  DiracSpinor Fb(Fa);
+  Fb.g() = (-1.0 * Fa).g();
+  return Fb;
+}
+
 DiracSpinor i_g0_g5(const DiracSpinor &Fa) {
   // Fb = i*γ5*Fa
 
   DiracSpinor Fb(Fa);
-  Fb.f() = (-1 * Fa).g();
-  Fb.g() = (-1 * Fa).f();
+  Fb.f() = (-1.0 * Fa).g();
+  Fb.g() = (-1.0 * Fa).f();
   return Fb;
 }
 
@@ -606,11 +801,11 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   const auto R1_abac = Rk_abcd(1.0, 1.0, Fv0, Fv1, Fv0, Fa0);
   const auto R1_1a1b = Rk_abcd(1.0, 1.0, F1, Fv0, F1, Fv1);
 
-  std::cout
-      << "\nRadial integration orthonormality checks with λ = μ = 1\nR1_aaaa = "
-      << R1_aaaa << "\t=0?\nR1_abab = " << R1_abab
-      << "\t=0?\nR1_abac = " << R1_abac << "\t=0?\nR1_1a1b = " << R1_1a1b
-      << "\t=0?\n";
+  std::cout << "\nRadial integration orthonormality checks with λ = μ = "
+               "1\nR1_aaaa = "
+            << R1_aaaa << "\t=0?\nR1_abab = " << R1_abab
+            << "\t=0?\nR1_abac = " << R1_abac << "\t=0?\nR1_1a1b = " << R1_1a1b
+            << "\t=0?\n";
 
   // V_nv checks
 
@@ -620,10 +815,10 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   const auto min_mu = 1e-6;
 
   // Test ground with all core states
-  std::cout
-      << "\nTesting V_nv in limits for all valence |v> and basis |n> "
-         "states.\nShowing >10% discrepancies.\n\nFor the exact cases,\nμ->0 = "
-      << min_mu << "\nμ->∞ = " << max_mu;
+  std::cout << "\nTesting V_nv in limits for all valence |v> and basis |n> "
+               "states.\nShowing >10% discrepancies.\n\nFor the exact "
+               "cases,\nμ->0 = "
+            << min_mu << "\nμ->∞ = " << max_mu;
 
   std::cout << "\n\nCheck OK:\n|v>  κv   |n>  κn     massless exact (μ->0) "
                " rel diff exact "

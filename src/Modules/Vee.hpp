@@ -3,6 +3,20 @@
 #include "Wavefunction/Wavefunction.hpp"
 
 namespace Module {
+void Vee(const IO::InputBlock &input, const Wavefunction &wf);
+void ss(const IO::InputBlock &input, const Wavefunction &wf);
+void vv(const IO::InputBlock &input, const Wavefunction &wf);
+
+double Rk_abcd_ss(const double k, const double mu, const DiracSpinor &Fa,
+                  const DiracSpinor &Fb, const DiracSpinor &Fc,
+                  const DiracSpinor &Fd);
+
+double Rk_abcd_vv(const double k, const double mu, const DiracSpinor &Fa,
+                  const DiracSpinor &Fb, const DiracSpinor &Fc,
+                  const DiracSpinor &Fd);
+
+void sps(const IO::InputBlock &input, const Wavefunction &wf);
+
 void update_Dv(double &Dv, const std::vector<DiracSpinor> core, DiracSpinor &Fv,
                const DiracSpinor &Fn, const Grid &gr, const double y,
                const double mu, const bool contact);
@@ -10,7 +24,6 @@ double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb);
 double V_nv(const bool contact, const std::vector<DiracSpinor> core,
             const DiracSpinor &Fv, const DiracSpinor &Fn, const double y,
             const double mu);
-void sps(const IO::InputBlock &input, const Wavefunction &wf);
 double R_abcd_contact(const double mu, const DiracSpinor &Fa,
                       const DiracSpinor &Fb, const DiracSpinor &Fc,
                       const DiracSpinor &Fd);
@@ -24,6 +37,8 @@ std::vector<double> Bk_ab(const double k, const double mu,
                           const DiracSpinor &Fa, const DiracSpinor &Fb);
 double mod_sph_bessel_i(double n, double x);
 double mod_sph_bessel_k(double n, double x);
+
+DiracSpinor g0(const DiracSpinor &Fa);
 DiracSpinor i_g0_g5(const DiracSpinor &Fa);
 void sps_testing(const Wavefunction &wf, const bool contact);
 } // namespace Module
