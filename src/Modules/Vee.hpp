@@ -4,9 +4,12 @@
 
 namespace Module {
 void Vee(const IO::InputBlock &input, const Wavefunction &wf);
-void ss(const IO::InputBlock &input, const Wavefunction &wf);
-void vv(const IO::InputBlock &input, const Wavefunction &wf);
-
+void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
+                      const Wavefunction &wf);
+double dE_ss(const double mu, const std::vector<DiracSpinor> &core,
+             const DiracSpinor Fv);
+double dE_vv(const double mu, const std::vector<DiracSpinor> &core,
+             const DiracSpinor Fv);
 double Rk_abcd_ss(const double k, const double mu, const DiracSpinor &Fa,
                   const DiracSpinor &Fb, const DiracSpinor &Fc,
                   const DiracSpinor &Fd);

@@ -23,6 +23,7 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
                {"N_mu", "Number of masses to consider [100]"},
                {"n", "Principal quantum number for Dv [ground]"},
                {"kappa", "Kappa for Dv [ground]"},
+               {"A2", "Second isotope's mass (for 'ss' or 'vv') [A+5]"},
                {"test", "Run module testing [false]"}});
 
   // If we are just requesting 'help', don't run module:
@@ -31,16 +32,14 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   }
   const auto e_handler = gsl_set_error_handler_off();
 
-  const std::string type = input.get<std::string>("type", "sp");
+  const std::string int_type = input.get<std::string>("type", "sp");
 
-  if (type == "sp" || type == "ps" || type == "sps") {
+  if (int_type == "sp" || int_type == "ps" || int_type == "sps") {
     sps(input, wf);
-  } else if (type == "ss") {
-    ss(input, wf);
-  } else if (type == "vv") {
-    vv(input, wf);
+  } else if (int_type == "ss" || int_type == "vv") {
+    ee_isotope_shift(int_type, input, wf);
   } else {
-    std::cout << "\nERROR: 'type = " << type
+    std::cout << "\nERROR: 'type = " << int_type
               << " is not valid. Ensure one of \n - 'sp' "
                  "(scalar-pseudoscalar)\n - 'ss' (scalar-scalar)\n - 'vv' "
                  "(vector-vector)\n is provided.";
@@ -48,80 +47,50 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   gsl_set_error_handler(e_handler);
 }
 
-void ss(const IO::InputBlock &input, const Wavefunction &wf) {
-  // Get ground state
-  int i_ground = 0;
-  double E_ground = wf.valence()[0].en();
-  const double min_mu = input.get<double>("min_mu", 1.0e-4);
-  const double max_mu = input.get<double>("max_mu", 1.0e4);
-  const double N_mu = input.get<double>("N_mu", 100.0);
+void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
+                      const Wavefunction &wf) {
 
   // Create second wavefunction
+  int A2 = input.get<int>("A2", wf.Anuc() + 5);
 
-  // Find the ground state of the given valence states
-  for (int i = 1; i < wf.valence().size(); ++i) {
-    const double E_test = wf.valence()[i].en();
+  // Create new input block, warn that modules after Vee will not run for wf2.
+  auto new_input =
+      IO::InputBlock("ampsci", input.path(), std::fstream(input.path()));
 
-    if (E_test < E_ground) {
-      E_ground = E_test;
-      i_ground = i;
+  new_input.merge("Atom{A = " + std::to_string(A2) + ";}");
+
+  // Currently just adds new_A without removing previous. OK because it reads the last,
+  // but would be safer to remove original
+
+  // Remove Vee module
+  const auto blocks_copy = new_input.blocks();
+  auto flag = false;
+
+  for (const auto block : blocks_copy) {
+    auto name = block.name();
+
+    if (name == "Module::Vee") {
+      new_input.remove_block(name);
+      flag = true;
+    } else if (flag == true) {
+      new_input.remove_block(name);
+      std::cout << "\nWARNING: removing '" << name << "' block for wf2.";
     }
   }
 
-  const auto n_ground = wf.valence()[i_ground].n();
-  const auto kappa_ground = wf.valence()[i_ground].kappa();
+  // Create second wavefunction
+  std::cout << "\n\nCreating wavefunction for A = " << A2 << ".\n";
 
-  const int v_n = input.get<int>("n", n_ground);
-  const int v_kappa = input.get<int>("kappa", kappa_ground);
-
-  //const auto Fv = *wf.getState(v_n, v_kappa);
-  const auto Fv = wf.valence()[0];
-
-  // Loop through mus
+  // Create second wavefunction
+  const auto wf2 = ampsci(new_input);
 
   std::cout
-      << "\nEnergy shift due to a new scalar-scalar "
-         "electron interaction (to first order).\nCalculating for the state "
-      << Fv.symbol() << " with mediator mass μ."
-      << "\n         μ    E (a.u.)   dE (a.u.)\n";
-  for (double mu = min_mu; mu <= max_mu; mu += (max_mu - min_mu) / 10.0) {
-    double dE = 0;
+      << "\nCalculating energy shifts from scalar-scalar interactions in\n";
+  std::cout << wf.atom() << " and \n" << wf2.atom() << "\n";
 
-    for (auto Fa : wf.core()) {
-      const auto R_vava = Rk_abcd_ss(0, mu, Fv, Fa, Fv, Fa);
-      const auto A_vava = Fa.twoj();
-
-      // Sum over |ja-jv| <= k <= ja+jv
-      auto R_vaav = 0;
-      auto A_vaav = 0;
-      for (int twok = std::abs(Fa.twoj() - Fv.twoj());
-           twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
-        if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
-          const int k = twok * 0.5;
-          R_vaav = Rk_abcd_ss(k, mu, Fv, Fa, Fa, Fv);
-
-          A_vaav = (2.0 * k + 1) * Angular::Ck_kk(k, Fv.kappa(), Fa.kappa()) *
-                   Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
-        }
-        const double jv = Fa.twoj() * 0.5;
-        A_vaav *=
-            std::pow(-1.0, (Fv.twoj() - Fa.twoj()) * 0.5) / (2.0 * jv + 1);
-
-        const auto u_vava = R_vava * A_vava;
-        const auto u_vaav = R_vaav * A_vaav;
-
-        dE += u_vava - u_vaav;
-      }
-    }
-
-    fmt::print("{:10.4e} {:11.4e} {:11.4e}\n", mu, Fv.en(), dE);
-  }
-}
-
-void vv(const IO::InputBlock &input, const Wavefunction &wf) {
   // Get ground state
   int i_ground = 0;
-  double E_ground = wf.valence()[0].en();
+  double E_ground = wf.valence()[i_ground].en();
   const double min_mu = input.get<double>("min_mu", 1.0e-4);
   const double max_mu = input.get<double>("max_mu", 1.0e4);
   const double N_mu = input.get<double>("N_mu", 100.0);
@@ -143,46 +112,115 @@ void vv(const IO::InputBlock &input, const Wavefunction &wf) {
   const int v_kappa = input.get<int>("kappa", kappa_ground);
 
   const auto Fv = *wf.getState(v_n, v_kappa);
+  const auto Fv2 = *wf2.getState(v_n, v_kappa);
+
+  //const auto Fv = wf.valence()[0];
 
   // Loop through mus
-
   std::cout
-      << "\nEnergy shift due to a new vector-vector "
+      << "\nEnergy shift due to a new scalar-scalar "
          "electron interaction (to first order).\nCalculating for the state "
       << Fv.symbol() << " with mediator mass μ."
-      << "\n         μ    E (a.u.)   dE (a.u.)\n";
-  for (double mu = min_mu; mu <= max_mu; mu += (max_mu - min_mu) / 10.0) {
-    double dE = 0;
+      << "\n         μ     E1 (au)    dE1 (au)     E2 (au)    dE2 (au)     I"
+         "S (au)    IS (MHz)\n";
 
-    for (auto Fa : wf.core()) {
-      const auto R_vava = Rk_abcd_vv(0, mu, Fv, Fa, Fv, Fa);
-      const auto A_vava = Fa.twoj();
+  if (int_type == "ss") {
+    for (double log_mu = log(min_mu); log_mu < log(max_mu);
+         log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
-      // Sum over |ja-jv| <= k <= ja+jv
-      auto R_vaav = 0;
-      auto A_vaav = 0;
-      for (int twok = std::abs(Fa.twoj() - Fv.twoj());
-           twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
-        if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
-          const int k = twok * 0.5;
-          R_vaav = Rk_abcd_vv(k, mu, Fv, Fa, Fa, Fv);
+      const auto mu = std::exp(log_mu);
 
-          A_vaav = (2.0 * k + 1) * Angular::Ck_kk(k, Fv.kappa(), Fa.kappa()) *
-                   Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
-        }
-        const double jv = Fa.twoj() * 0.5;
-        A_vaav *=
-            std::pow(-1.0, (Fv.twoj() - Fa.twoj()) * 0.5) / (2.0 * jv + 1);
+      double dE = dE_ss(mu, wf.core(), Fv);
+      double dE2 = dE_ss(mu, wf2.core(), Fv2);
 
-        const auto u_vava = R_vava * A_vava;
-        const auto u_vaav = R_vaav * A_vaav;
+      const auto IS = dE - dE2;
 
-        dE += u_vava - u_vaav;
-      }
+      fmt::print(
+          "{:10.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e}\n",
+          mu, Fv.en(), dE, Fv2.en(), dE, IS, IS * PhysConst::Hartree_MHz);
     }
+  } else {
+    for (double log_mu = log(min_mu); log_mu < log(max_mu);
+         log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
-    fmt::print("{:10.4e} {:11.4e} {:11.4e}\n", mu, Fv.en(), dE);
+      const auto mu = std::exp(log_mu);
+
+      double dE = dE_vv(mu, wf.core(), Fv);
+      double dE2 = dE_vv(mu, wf2.core(), Fv2);
+
+      const auto IS = dE - dE2;
+
+      fmt::print(
+          "{:10.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e}\n",
+          mu, Fv.en(), dE, Fv2.en(), dE, IS, IS * PhysConst::Hartree_MHz);
+    }
   }
+}
+
+double dE_ss(const double mu, const std::vector<DiracSpinor> &core,
+             const DiracSpinor Fv) {
+  double dE = 0;
+  for (auto Fa : core) {
+
+    const auto R_vava = Rk_abcd_ss(0, mu, Fv, Fa, Fv, Fa);
+    const auto A_vava = Fa.twoj();
+
+    // Sum over |ja-jv| <= k <= ja+jv
+    auto R_vaav = 0;
+    //    auto R_vaav_2 = 0;
+    auto A_vaav = 0;
+    for (int twok = std::abs(Fa.twoj() - Fv.twoj());
+         twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
+      if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
+        const int k = twok * 0.5;
+        R_vaav = Rk_abcd_ss(k, mu, Fv, Fa, Fa, Fv);
+        A_vaav = (2.0 * k + 1) * Angular::Ck_kk(k, Fv.kappa(), Fa.kappa()) *
+                 Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+      }
+      const double jv = Fa.twoj() * 0.5;
+      A_vaav *= std::pow(-1.0, (Fv.twoj() - Fa.twoj()) * 0.5) / (2.0 * jv + 1);
+
+      const auto u_vava = R_vava * A_vava;
+      const auto u_vaav = R_vaav * A_vaav;
+
+      dE += u_vava - u_vaav;
+    }
+  }
+  return dE;
+}
+
+double dE_vv(const double mu, const std::vector<DiracSpinor> &core,
+             const DiracSpinor Fv) {
+
+  double dE = 0;
+
+  for (auto Fa : core) {
+    const auto R_vava = Rk_abcd_vv(0, mu, Fv, Fa, Fv, Fa);
+    const auto A_vava = Fa.twoj();
+
+    // Sum over |ja-jv| <= k <= ja+jv
+    auto R_vaav = 0;
+    auto A_vaav = 0;
+    for (int twok = std::abs(Fa.twoj() - Fv.twoj());
+         twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
+      if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
+        const int k = twok * 0.5;
+        R_vaav = Rk_abcd_vv(k, mu, Fv, Fa, Fa, Fv);
+
+        A_vaav = (2.0 * k + 1) * Angular::Ck_kk(k, Fv.kappa(), Fa.kappa()) *
+                 Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+      }
+      const double jv = Fa.twoj() * 0.5;
+      A_vaav *= std::pow(-1.0, (Fv.twoj() - Fa.twoj()) * 0.5) / (2.0 * jv + 1);
+
+      const auto u_vava = R_vava * A_vava;
+      const auto u_vaav = R_vaav * A_vaav;
+
+      dE += u_vava - u_vaav;
+    }
+  }
+
+  return dE;
 }
 
 double Rk_abcd_ss(const double k, const double mu, const DiracSpinor &Fa,
