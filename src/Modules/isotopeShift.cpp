@@ -151,7 +151,7 @@ void isotopeShift(const IO::InputBlock &input, const Wavefunction &wf) {
     for (const auto block : blocks_copy) {
       auto name = block.name();
 
-      if (name == "Module::isotopeShift") {
+      if (name == "Module::isotopeShift" || name == "Module::Vee") {
         new_input.remove_block(name);
       }
     }
