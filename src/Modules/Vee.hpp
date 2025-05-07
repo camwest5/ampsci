@@ -6,23 +6,11 @@ namespace Module {
 void Vee(const IO::InputBlock &input, const Wavefunction &wf);
 void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
                       const Wavefunction &wf);
-double dE_ss(const double mu, const std::vector<DiracSpinor> &core,
-             const DiracSpinor Fv);
-double dE_vv(const double mu, const std::vector<DiracSpinor> &core,
-             const DiracSpinor Fv);
-double Rk_abcd_ss(const double k, const double mu, const DiracSpinor &Fa,
-                  const DiracSpinor &Fb, const DiracSpinor &Fc,
-                  const DiracSpinor &Fd);
-
-double Rk_abcd_vv(const double k, const double mu, const DiracSpinor &Fa,
-                  const DiracSpinor &Fb, const DiracSpinor &Fc,
-                  const DiracSpinor &Fd);
+double dE(const double mu, const std::string int_type,
+          const std::vector<DiracSpinor> &core, const DiracSpinor Fv);
 
 void sps(const IO::InputBlock &input, const Wavefunction &wf);
 
-void update_Dv(double &Dv, const std::vector<DiracSpinor> core, DiracSpinor &Fv,
-               const DiracSpinor &Fn, const Grid &gr, const double y,
-               const double mu, const bool contact);
 double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb);
 double V_nv(const bool contact, const std::vector<DiracSpinor> core,
             const DiracSpinor &Fv, const DiracSpinor &Fn, const double y,
@@ -32,7 +20,7 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
                       const DiracSpinor &Fd);
 double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
                const DiracSpinor &Fb, const DiracSpinor &Fc,
-               const DiracSpinor &Fd);
+               const DiracSpinor &Fd, const std::string int_type = "sp");
 double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
                         const DiracSpinor &Fb, const DiracSpinor &Fc,
                         const DiracSpinor &Fd);

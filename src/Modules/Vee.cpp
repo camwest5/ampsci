@@ -124,120 +124,52 @@ void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
       << "\n         μ     E1 (au)    dE1 (au)     E2 (au)    dE2 (au)     I"
          "S (au)    IS (MHz)\n";
 
-  if (int_type == "ss") {
-    for (double log_mu = log(min_mu); log_mu < log(max_mu);
-         log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
+  for (double log_mu = log(min_mu); log_mu < log(max_mu);
+       log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
-      const auto mu = std::exp(log_mu);
+    const auto mu = std::exp(log_mu);
 
-      double dE = dE_ss(mu, wf.core(), Fv);
-      double dE2 = dE_ss(mu, wf2.core(), Fv2);
+    double dE1 = dE(mu, int_type, wf.core(), Fv);
+    double dE2 = dE(mu, int_type, wf2.core(), Fv2);
 
-      const auto IS = dE - dE2;
+    const auto IS = dE1 - dE2;
 
-      fmt::print(
-          "{:10.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e}\n",
-          mu, Fv.en(), dE, Fv2.en(), dE, IS, IS * PhysConst::Hartree_MHz);
-    }
-  } else {
-    for (double log_mu = log(min_mu); log_mu < log(max_mu);
-         log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
-
-      const auto mu = std::exp(log_mu);
-
-      double dE = dE_vv(mu, wf.core(), Fv);
-      double dE2 = dE_vv(mu, wf2.core(), Fv2);
-
-      const auto IS = dE - dE2;
-
-      fmt::print(
-          "{:10.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e}\n",
-          mu, Fv.en(), dE, Fv2.en(), dE, IS, IS * PhysConst::Hartree_MHz);
-    }
+    fmt::print(
+        "{:10.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4f}\n", mu,
+        Fv.en(), dE, Fv2.en(), dE, IS, IS * PhysConst::Hartree_MHz);
   }
 }
 
-double dE_ss(const double mu, const std::vector<DiracSpinor> &core,
-             const DiracSpinor Fv) {
-  double dE = 0;
+double dE(const double mu, const std::string int_type,
+          const std::vector<DiracSpinor> &core, const DiracSpinor Fv) {
+  double dE_val = 0;
   for (auto Fa : core) {
 
-    const auto R_vava = Rk_abcd_ss(0, mu, Fv, Fa, Fv, Fa);
+    const auto R_vava = Rk_abcd(0, mu, Fv, Fa, Fv, Fa, int_type);
     const auto A_vava = Fa.twoj();
 
     // Sum over |ja-jv| <= k <= ja+jv
-    auto R_vaav = 0;
-    //    auto R_vaav_2 = 0;
-    auto A_vaav = 0;
+    auto R_vaav = 0.0;
+    auto A_vaav = 0.0;
+
     for (int twok = std::abs(Fa.twoj() - Fv.twoj());
          twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
       if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
         const int k = twok * 0.5;
-        R_vaav = Rk_abcd_ss(k, mu, Fv, Fa, Fa, Fv);
+        R_vaav = Rk_abcd(k, mu, Fv, Fa, Fa, Fv, int_type);
         A_vaav = (2.0 * k + 1) * Angular::Ck_kk(k, Fv.kappa(), Fa.kappa()) *
                  Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
       }
-      const double jv = Fa.twoj() * 0.5;
+      const double jv = Fv.twoj() * 0.5;
       A_vaav *= std::pow(-1.0, (Fv.twoj() - Fa.twoj()) * 0.5) / (2.0 * jv + 1);
 
       const auto u_vava = R_vava * A_vava;
       const auto u_vaav = R_vaav * A_vaav;
 
-      dE += u_vava - u_vaav;
+      dE_val += u_vava - u_vaav;
     }
   }
-  return dE;
-}
-
-double dE_vv(const double mu, const std::vector<DiracSpinor> &core,
-             const DiracSpinor Fv) {
-
-  double dE = 0;
-
-  for (auto Fa : core) {
-    const auto R_vava = Rk_abcd_vv(0, mu, Fv, Fa, Fv, Fa);
-    const auto A_vava = Fa.twoj();
-
-    // Sum over |ja-jv| <= k <= ja+jv
-    auto R_vaav = 0;
-    auto A_vaav = 0;
-    for (int twok = std::abs(Fa.twoj() - Fv.twoj());
-         twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
-      if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
-        const int k = twok * 0.5;
-        R_vaav = Rk_abcd_vv(k, mu, Fv, Fa, Fa, Fv);
-
-        A_vaav = (2.0 * k + 1) * Angular::Ck_kk(k, Fv.kappa(), Fa.kappa()) *
-                 Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
-      }
-      const double jv = Fa.twoj() * 0.5;
-      A_vaav *= std::pow(-1.0, (Fv.twoj() - Fa.twoj()) * 0.5) / (2.0 * jv + 1);
-
-      const auto u_vava = R_vava * A_vava;
-      const auto u_vaav = R_vaav * A_vaav;
-
-      dE += u_vava - u_vaav;
-    }
-  }
-
-  return dE;
-}
-
-double Rk_abcd_ss(const double k, const double mu, const DiracSpinor &Fa,
-                  const DiracSpinor &Fb, const DiracSpinor &Fc,
-                  const DiracSpinor &Fd) {
-  // Modify so that they are correct when parsed to scalar-pseudoscalar Rk_abcd
-  const auto inv_ig5_Fc = -1.0 * g0(i_g0_g5(Fc));
-  return Rk_abcd(k, mu, Fa, Fb, inv_ig5_Fc, Fd);
-}
-
-double Rk_abcd_vv(const double k, const double mu, const DiracSpinor &Fa,
-                  const DiracSpinor &Fb, const DiracSpinor &Fc,
-                  const DiracSpinor &Fd) {
-  // Modify so that they are correct when parsed to scalar-pseudoscalar Rk_abcd
-  const auto inv_ig0g5_Fc = -1.0 * i_g0_g5(Fc);
-  const auto inv_g0_Fd = -1.0 * i_g0_g5(Fc);
-  return Rk_abcd(k, mu, Fa, Fb, inv_ig0g5_Fc, inv_g0_Fd);
+  return dE_val;
 }
 
 void sps(const IO::InputBlock &input, const Wavefunction &wf) {
@@ -421,7 +353,7 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
 
 double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
                const DiracSpinor &Fb, const DiracSpinor &Fc,
-               const DiracSpinor &Fd) {
+               const DiracSpinor &Fd, const std::string int_type = "sp") {
   // Compare with yk_ab to find r> and r< functions
   // Then create radial operator?
   // Find the Rk_abcd implementation in code.
@@ -429,16 +361,20 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
   //const auto i0 = std::max(Fa.min_pt(), Fc.min_pt());
   //const auto imax = std::min(Fa.max_pt(), Fc.max_pt());
 
-  const auto screening_function = Bk_ab(k, mu, Fb, g0(Fd));
+  const auto g_Fc = int_type == "sp" ? i_g0_g5(Fc) :
+                    int_type == "ss" ? g0(Fc) :
+                                       Fc;
 
-  const auto ig0g5_Fc = i_g0_g5(Fc);
+  const auto g_Fd = int_type == "vv" ? Fd : g0(Fd);
+
+  const auto screening_function = Bk_ab(k, mu, Fb, g_Fd);
 
   const auto Rff =
-      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), ig0g5_Fc.f(),
+      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), g_Fc.f(),
                          screening_function, Fa.grid().drdu());
 
   const auto Rgg =
-      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(), ig0g5_Fc.g(),
+      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(), g_Fc.g(),
                          screening_function, Fa.grid().drdu());
 
   return (Rff + Rgg) * Fa.grid().du() * mu;
