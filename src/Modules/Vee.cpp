@@ -136,7 +136,7 @@ void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
 
     fmt::print(
         "{:10.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4f}\n", mu,
-        Fv.en(), dE, Fv2.en(), dE, IS, IS * PhysConst::Hartree_MHz);
+        Fv.en(), dE1, Fv2.en(), dE2, IS, IS * PhysConst::Hartree_MHz);
   }
 }
 
@@ -269,6 +269,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
       }
     }
 
+    // Multiply by hbar c
     Dv *= 1.0 / PhysConst::alpha;
 
     const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
@@ -355,7 +356,7 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
 
 double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
                const DiracSpinor &Fb, const DiracSpinor &Fc,
-               const DiracSpinor &Fd, const std::string int_type = "sp") {
+               const DiracSpinor &Fd, const std::string int_type) {
   // Compare with yk_ab to find r> and r< functions
   // Then create radial operator?
   // Find the Rk_abcd implementation in code.
@@ -363,11 +364,11 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
   //const auto i0 = std::max(Fa.min_pt(), Fc.min_pt());
   //const auto imax = std::min(Fa.max_pt(), Fc.max_pt());
 
+  const auto g_Fc = int_type == "vv" ? Fc : g0(Fc);
+
   const auto g_Fd = int_type == "sp" ? i_g0_g5(Fd) :
                     int_type == "ss" ? g0(Fd) :
                                        Fd;
-
-  const auto g_Fc = int_type == "vv" ? Fc : g0(Fc);
 
   const auto screening_function = Bk_ab(k, mu, Fb, g_Fd);
 
