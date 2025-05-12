@@ -262,7 +262,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
         // <v|d|n>
         const auto d_vn = d_ab(wf.grid(), Fv, Fn);
 
-        // <n|V|v> = Σ_a (u_nava - u_anva)
+        // <n|V|v> = Σ_a (u_anav - u_anva)
         const auto Vsps = V_nv(contact, wf.core(), Fv, Fn, y_sps, mu);
 
         Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
@@ -298,17 +298,17 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
     return 0.0;
   }
 
-  auto u_nava = 0.0;
+  auto u_anav = 0.0;
   auto u_naav = 0.0;
   auto u_anva = 0.0;
 
   for (auto Fa : core) {
     if (Fn.kappa() == -Fv.kappa()) {
-      const auto R0_nava = contact == true ?
-                               R_abcd_contact(mu, Fn, Fa, Fv, Fa) :
-                           mu == 0.0 ? Rk_abcd_massless(0, Fn, Fa, Fv, Fa) :
-                                       Rk_abcd(0, mu, Fn, Fa, Fv, Fa);
-      u_nava += R0_nava * Fa.twojp1();
+      const auto R0_anav = contact == true ?
+                               R_abcd_contact(mu, Fa, Fn, Fa, Fv) :
+                           mu == 0.0 ? Rk_abcd_massless(0, Fa, Fn, Fa, Fv) :
+                                       Rk_abcd(0, mu, Fa, Fn, Fa, Fv);
+      u_anav += R0_anav * Fa.twojp1();
     }
 
     for (int twok = std::abs(Fa.twoj() - Fv.twoj());
@@ -316,16 +316,16 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
       if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
         const double k = 0.5 * twok;
         const auto A_anva = (2.0 * k + 1) *
-                            Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa()) *
-                            Angular::Ck_kk(k, Fn.kappa(), Fa.kappa());
+                            Angular::Ck_kk(k, Fa.kappa(), Fv.kappa()) *
+                            Angular::Ck_kk(k, Fn.kappa(), -Fa.kappa());
         const auto R_anva = contact == true ?
                                 R_abcd_contact(mu, Fa, Fn, Fv, Fa) :
                             mu == 0.0 ? Rk_abcd_massless(k, Fa, Fn, Fv, Fa) :
                                         Rk_abcd(k, mu, Fa, Fn, Fv, Fa);
 
         const auto A_naav = (2.0 * k + 1) *
-                            Angular::Ck_kk(k, Fn.kappa(), -Fa.kappa()) *
-                            Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+                            Angular::Ck_kk(k, Fn.kappa(), Fa.kappa()) *
+                            Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa());
         const auto R_naav = contact == true ?
                                 R_abcd_contact(mu, Fn, Fa, Fa, Fv) :
                             mu == 0.0 ? Rk_abcd_massless(k, Fn, Fa, Fa, Fv) :
@@ -348,7 +348,7 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
     u_anva *= phase;
   }
 
-  return (u_nava - u_naav - u_anva) * y;
+  return (u_anav - u_naav - u_anva) * y;
 }
 
 double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
@@ -361,11 +361,11 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
   //const auto i0 = std::max(Fa.min_pt(), Fc.min_pt());
   //const auto imax = std::min(Fa.max_pt(), Fc.max_pt());
 
-  const auto g_Fc = int_type == "sp" ? i_g0_g5(Fc) :
-                    int_type == "ss" ? g0(Fc) :
-                                       Fc;
+  const auto g_Fd = int_type == "sp" ? i_g0_g5(Fd) :
+                    int_type == "ss" ? g0(Fd) :
+                                       Fd;
 
-  const auto g_Fd = int_type == "vv" ? Fd : g0(Fd);
+  const auto g_Fc = int_type == "vv" ? Fc : g0(Fc);
 
   const auto screening_function = Bk_ab(k, mu, Fb, g_Fd);
 
@@ -386,16 +386,16 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 
   const auto &gr = Fa.grid();
   const auto &r = gr.r();
-  const auto ig0g5_Fc = i_g0_g5(Fc);
-  const auto g0_Fd = g0(Fd);
+  const auto g0_Fc = g0(Fc);
+  const auto ig0g5_Fd = i_g0_g5(Fd);
 
   // Delta case
 
   std::vector<double> integrand(gr.size());
 
   for (int i = 0; i < gr.size(); ++i) {
-    integrand[i] = (Fa.f(i) * ig0g5_Fc.f(i) + Fa.g(i) * ig0g5_Fc.g(i)) *
-                   (Fb.f(i) * g0_Fd.f(i) + Fb.g(i) * g0_Fd.g(i)) /
+    integrand[i] = (Fa.f(i) * g0_Fc.f(i) + Fa.g(i) * g0_Fc.g(i)) *
+                   (Fb.f(i) * ig0g5_Fd.f(i) + Fb.g(i) * ig0g5_Fd.g(i)) /
                    (gr.r(i) * gr.r(i));
   }
 
@@ -487,16 +487,16 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
                         const DiracSpinor &Fb, const DiracSpinor &Fc,
                         const DiracSpinor &Fd) {
-  const auto screening_function = Coulomb::yk_ab(k, Fb, g0(Fd));
+  const auto screening_function = Coulomb::yk_ab(k, Fb, i_g0_g5(Fd));
 
-  const auto ig0g5_Fc = i_g0_g5(Fc);
+  const auto g0_Fc = g0(Fc);
 
   const auto Rff =
-      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), ig0g5_Fc.f(),
+      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), g0_Fc.f(),
                          screening_function, Fa.grid().drdu());
 
   const auto Rgg =
-      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(), ig0g5_Fc.g(),
+      NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.g(), g0_Fc.g(),
                          screening_function, Fa.grid().drdu());
 
   return (Rff + Rgg) * Fa.grid().du() / (2 * k + 1);
