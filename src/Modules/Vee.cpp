@@ -269,6 +269,8 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
       }
     }
 
+    Dv *= 1.0 / PhysConst::alpha;
+
     const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
 
