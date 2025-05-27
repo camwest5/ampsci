@@ -24,6 +24,7 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
                {"n", "Principal quantum number for Dv [ground]"},
                {"kappa", "Kappa for Dv [ground]"},
                {"A2", "Second isotope's mass (for 'ss' or 'vv') [A+5]"},
+               {"g0", "Include the gamma-0 term on both electrons? [true]"},
                {"test", "Run module testing [false]"}});
 
   // If we are just requesting 'help', don't run module:
@@ -178,6 +179,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   const double min_mu = input.get<double>("min_mu", 1.0e-4);
   const double max_mu = input.get<double>("max_mu", 1.0e4);
   const double N_mu = input.get<double>("N_mu", 100.0);
+  const bool g0_both = input.get<bool>("g0", true);
 
   if (input.get<bool>("test", false) == true) {
     sps_testing(wf, contact);
@@ -294,7 +296,7 @@ double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb) {
 
 double V_nv(const bool contact, const std::vector<DiracSpinor> core,
             const DiracSpinor &Fv, const DiracSpinor &Fn, const double y,
-            const double mu) {
+            const double mu, const bool g0_both) {
 
   // For safety
   if (Fv.twoj() != Fn.twoj()) {
@@ -356,7 +358,8 @@ double V_nv(const bool contact, const std::vector<DiracSpinor> core,
 
 double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
                const DiracSpinor &Fb, const DiracSpinor &Fc,
-               const DiracSpinor &Fd, const std::string int_type) {
+               const DiracSpinor &Fd, const std::string int_type,
+               const bool g0_both) {
   // Compare with yk_ab to find r> and r< functions
   // Then create radial operator?
   // Find the Rk_abcd implementation in code.
@@ -364,7 +367,7 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
   //const auto i0 = std::max(Fa.min_pt(), Fc.min_pt());
   //const auto imax = std::min(Fa.max_pt(), Fc.max_pt());
 
-  const auto g_Fc = int_type == "vv" ? Fc : g0(Fc);
+  const auto g_Fc = int_type == "vv" ? Fc : g0_both ? g0(Fc) : Fc;
 
   const auto g_Fd = int_type == "sp" ? i_g0_g5(Fd) :
                     int_type == "ss" ? g0(Fd) :
