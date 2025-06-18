@@ -1,7 +1,8 @@
-#include "DiracOperator.hpp"
+#include "GenerateOperator.hpp"
 #include "Maths/Grid.hpp"
 #include "Wavefunction/Wavefunction.hpp"
 #include "catch2/catch.hpp"
+#include "include.hpp"
 #include <utility>
 
 TEST_CASE("DiracOperator", "[DiracOperator][unit]") {
@@ -17,6 +18,25 @@ TEST_CASE("DiracOperator", "[DiracOperator][unit]") {
     int kappa = Angular::kappaFromIndex(ik);
     int n = Angular::l_k(kappa) + 1;
     orbs.push_back(DiracSpinor::exactHlike(n, kappa, wf.grid_sptr(), 1.0));
+  }
+
+  //--------------------------------------------------------------------
+  SECTION("Radial_int_rhs") {
+    for (const auto &[name, generator] : DiracOperator::operator_list) {
+      std::cout << name << "\n";
+      const auto h = generator({}, wf);
+      for (const auto &a : orbs) {
+        for (const auto &b : orbs) {
+          if (h->isZero(a, b))
+            continue;
+          // For most operators, these are exactly the same (one implemented in terms of the other)
+          auto r1 = a * h->radial_rhs(a.kappa(), b);
+          auto r2 = h->radialIntegral(a, b);
+          // std::cout << a << " " << b << " | " << r1 << " " << r2 << "\n";
+          REQUIRE(r1 == Approx(r2).margin(1.0e-15));
+        }
+      }
+    }
   }
 
   //--------------------------------------------------------------------
@@ -175,13 +195,13 @@ TEST_CASE("DiracOperator", "[DiracOperator][unit]") {
     // test data generated with "old" mu = 2.582025
     const IO::InputBlock options{""};
     auto h0 = DiracOperator::generate(
-        "hfs", {"hfs", "F(r)=pointlike; mu=2.582025;"}, wf);
-    auto hB =
-        DiracOperator::generate("hfs", {"hfs", "F(r)=Ball; mu=2.582025;"}, wf);
+        "hfs", {"hfs", "nuc_mag=pointlike; mu=2.582025;"}, wf);
+    auto hB = DiracOperator::generate(
+        "hfs", {"hfs", "nuc_mag=Ball; mu=2.582025;"}, wf);
     auto hS = DiracOperator::generate(
-        "hfs", {"hfs", "F(r)=SingleParticle; mu=2.582025;"}, wf);
+        "hfs", {"hfs", "nuc_mag=SingleParticle; mu=2.582025;"}, wf);
     auto h0_au = DiracOperator::generate(
-        "hfs", {"hfs", "F(r)=pointlike; units=au; mu=2.582025;"}, wf);
+        "hfs", {"hfs", "nuc_mag=pointlike; units=au; mu=2.582025;"}, wf);
 
     REQUIRE(h0->get_d_order() == 0);
     REQUIRE(h0->imaginaryQ() == false);
@@ -223,8 +243,8 @@ TEST_CASE("DiracOperator", "[DiracOperator][unit]") {
                                   {"3d-", "3d-", 5.1893316793e-01}};
 
     const IO::InputBlock options{""};
-    auto h =
-        DiracOperator::generate("hfs", {"hfs", "k=2; F(r)=pointlike;"}, wf);
+    auto h = DiracOperator::generate(
+        "hfs", {"hfs", "k=2; nuc_mag=pointlike; Q=1.0; "}, wf);
 
     REQUIRE(h->get_d_order() == 0);
     REQUIRE(h->imaginaryQ() == false);

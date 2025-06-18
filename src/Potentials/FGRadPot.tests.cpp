@@ -1,5 +1,5 @@
-#include "Physics/FGRadPot.hpp"
-#include "DiracOperator/DiracOperator.hpp"
+#include "Potentials/FGRadPot.hpp"
+#include "DiracOperator/include.hpp"
 #include "Wavefunction/Wavefunction.hpp"
 #include "catch2/catch.hpp"
 #include "qip/Vector.hpp"

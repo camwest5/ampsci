@@ -322,6 +322,19 @@ DiracSpinor::check_ortho(const std::vector<DiracSpinor> &a,
 }
 
 //==============================================================================
+void DiracSpinor::orthog(const DiracSpinor &rhs) {
+  if (rhs.kappa() != m_kappa)
+    return;
+  const auto k = *this * rhs;
+  const auto p0 = std::max(m_p0, rhs.m_p0);
+  const auto pi = std::min(m_pinf, rhs.m_pinf);
+  for (std::size_t i = p0; i < pi; ++i) {
+    m_f[i] -= k * rhs.m_f[i];
+    m_g[i] -= k * rhs.m_g[i];
+  }
+}
+
+//==============================================================================
 void DiracSpinor::orthonormaliseOrbitals(std::vector<DiracSpinor> &in_orbs,
                                          int num_its)
 // Note: this function is static
@@ -455,4 +468,33 @@ DiracSpinor::split_by_core(const std::vector<DiracSpinor> &orbitals,
     }
   }
   return out;
+}
+
+//==============================================================================
+std::vector<DiracSpinor>
+DiracSpinor::subset(const std::vector<DiracSpinor> &basis,
+                    const std::string &subset_string) {
+
+  // Form 'subset' from {a} in 'basis', if:
+  //    a _is_ in subset_string AND
+  //    a _is not_ in exclude_string
+
+  std::vector<DiracSpinor> subset;
+  const auto nmaxk_list = AtomData::n_kappa_list(subset_string);
+
+  for (const auto &a : basis) {
+
+    // Check if a is present in 'subset_string'
+    const auto nk =
+        std::find_if(nmaxk_list.cbegin(), nmaxk_list.cend(),
+                     [&a](const auto &tnk) { return a.kappa() == tnk.second; });
+    if (nk == nmaxk_list.cend())
+      continue;
+    // nk is now max n, for given kappa {max_n, kappa}
+    if (a.n() > nk->first)
+      continue;
+
+    subset.push_back(a);
+  }
+  return subset;
 }

@@ -80,6 +80,11 @@ public:
                          const DiracSpinor &Fb, const DiracSpinor &Fc,
                          const DiracSpinor &Fd) const;
 
+  [[nodiscard]] double P2(const int k, const DiracSpinor &Fa,
+                          const DiracSpinor &Fb, const DiracSpinor &Fc,
+                          const DiracSpinor &Fd,
+                          const std::vector<double> &fk = {}) const;
+
   //! Calculates Wk=Qk+Pk using the existing yk integrals. Note: Yk and Ck
   //! tables *must* include all required values, or behaviour not defined.
   [[nodiscard]] double W(const int k, const DiracSpinor &Fa,
@@ -99,6 +104,9 @@ public:
   [[nodiscard]] DiracSpinor
   Pkv_bcd(const int k, int kappa, const DiracSpinor &Fb, const DiracSpinor &Fc,
           const DiracSpinor &Fd, const std::vector<double> &f2k = {}) const;
+
+  //! Checks if table is empty
+  bool empty() const { return m_Y.empty(); }
 
 private:
   // Allocates space for the Yk table, but does not calculate Yk. This is

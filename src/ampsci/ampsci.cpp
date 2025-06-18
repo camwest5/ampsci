@@ -1,4 +1,5 @@
 #include "ampsci.hpp"
+#include "DiracODE/BoundState.hpp"
 #include "IO/ChronoTimer.hpp"
 #include "IO/FRW_fileReadWrite.hpp" //for 'ExtraPotential'
 #include "IO/InputBlock.hpp"
@@ -36,13 +37,16 @@ Wavefunction ampsci(const IO::InputBlock &input) {
        {"Nucleus{}", "Set nuclear parameters"},
        {"Grid{}", "Set radial grid/lattice parameters"},
        {"HartreeFock{}", "Options for solving atomic system"},
-       {"RadPot{}", "Inlcude QED radiative potential"},
+       {"RadPot{}",
+        "Options for the QED radiative potential (usually defaults suffice)"},
        {"ExtraPotential{}",
         "Include an extra effective potential. Rarely used."},
        {"Basis{}", "Basis of HF eigenstates used for MBPT"},
        {"Correlations{}", "Options for MBPT and correlation corrections"},
        {"Spectrum{}",
         "Like basis, but includes correlations. Used for sum-over-states"},
+       {"Exotic{}",
+        "Option for including `exotic` (e.g., muonic) atom states."},
        {"CI{}", "Configuration Interaction"},
        {"Module::*{}", "Run any number of modules (* -> module name). `ampsci "
                        "-m` to see available modules"}});
@@ -60,7 +64,9 @@ Wavefunction ampsci(const IO::InputBlock &input) {
         "(c->infinity => alpha->0), or calculate sensitivity to "
         "variation of alpha. [1.0]"},
        {"run_label", "Optional label for output identity - for distinguishing "
-                     "outputs with different parameters"}});
+                     "outputs with different parameters"},
+       {"json_out", "Write (partial) wavefunction details to json file? "
+                    "true/false [false]"}});
 
   const auto atom_block = input.get_block("Atom");
 
@@ -152,10 +158,11 @@ Wavefunction ampsci(const IO::InputBlock &input) {
        {"eps", "HF convergance goal [1.0e-13]"},
        {"method", "Method for mean-field approximation: HartreeFock, Hartree, "
                   "KohnSham, Local [HartreeFock]"},
-       {"Breit", "Scale for factor for Breit Hamiltonian. Usially 0.0 (no "
-                 "Breit) or 1.0 (full Breit), but can take any value. [0.0]"},
+       {"Breit", "Include Breit into HF? true/false, or scale factor. Scale "
+                 "factor for Breit Hamiltonian is usially 0.0 (no "
+                 "Breit) or 1.0 (full Breit), but can take any value. [false]"},
        {"QED",
-        "Include QED? Three options: true, false, valence. If 'valencel, will "
+        "Include QED? Three options: true, false, valence. If 'valence, will "
         "include QED only into valence states, but not the core. Detailed QED "
         "options are set within the RadPot{} block - if that block is not set, "
         "defaults will be used. By default, this option is false, unless the "
@@ -166,7 +173,9 @@ Wavefunction ampsci(const IO::InputBlock &input) {
   const auto core = input.get({"HartreeFock"}, "core", "[]"s);
   const auto HF_method = input.get({"HartreeFock"}, "method", "HartreeFock"s);
   const auto eps_HF = input.get({"HartreeFock"}, "eps", 1.0e-13);
-  const auto x_Breit = input.get({"HartreeFock"}, "Breit", 0.0);
+  const auto tf_Breit = input.get({"HartreeFock"}, "Breit", false);
+  const auto x_Breit =
+      tf_Breit ? 1.0 : input.get({"HartreeFock"}, "Breit", 0.0);
   const auto valence = input.get({"HartreeFock"}, "valence", ""s);
   const auto mass_shift = input.get({"HartreeFock"}, "mass_shift", false);
 
@@ -226,8 +235,8 @@ Wavefunction ampsci(const IO::InputBlock &input) {
       }
     } else {
       const auto rc = input.get({"ExtraPotential"}, "r_cut", 1.0);
-      std::cout << "Adding effective polarisation potential [-0.5 * a * (r^4 + "
-                   "rc^4)]: a="
+      std::cout << "Adding effective polarisation potential "
+                   "[-0.5 * a * (r^4 + rc^4)]: a="
                 << ep_scale << ", rc=" << rc << '\n';
       const auto a4 = rc * rc * rc * rc;
       auto dV = [=](auto r) { return -0.5 / (r * r * r * r + a4); };
@@ -339,7 +348,10 @@ Wavefunction ampsci(const IO::InputBlock &input) {
         "ratio, for logarithimg Im(w) grid [0.01, 1.5]"},
        {"include_G", "Inlcude lower g-part into Sigma [false]"},
        {"include_Breit",
-        "Inlcude Breit corrections into Sigma (only for 2nd order) [false]"}});
+        "Inlcude Breit corrections into Sigma (only for 2nd order) [false]"},
+       {"n_max_Breit",
+        "Maximum n for excited states to include in Breit "
+        "correction to Correlation potential [<=0, means entire basis]"}});
 
   const bool do_brueckner = input.getBlock({"Correlations"}) != std::nullopt;
   const auto n_min_core = input.get({"Correlations"}, "n_min_core", 1);
@@ -368,6 +380,7 @@ Wavefunction ampsci(const IO::InputBlock &input) {
   const auto include_G = input.get({"Correlations"}, "include_G", false);
   const auto include_Breit =
       input.get({"Correlations"}, "include_Breit", false);
+  const auto n_max_Breit = input.get({"Correlations"}, "n_max_Breit", -1);
   // force sigma_omre to be always -ve
   const auto sigma_omre = -std::abs(
       input.get({"Correlations"}, "real_omega", -0.33 * wf.energy_gap()));
@@ -426,9 +439,10 @@ Wavefunction ampsci(const IO::InputBlock &input) {
   if (Sigma_ok && do_brueckner) {
     IO::ChronoTimer time("Sigma");
     wf.formSigma(n_min_core, n_min_core_F, sigma_rmin, sigma_rmax, sigma_stride,
-                 each_valence, include_G, include_Breit, lambda_k, fk, etak,
-                 sigma_read, sigma_write, sigma_Feynman, sigma_Screening,
-                 hole_particle, sigma_lmax, sigma_omre, w0, wratio, ek_Sig);
+                 each_valence, include_G, include_Breit, n_max_Breit, lambda_k,
+                 fk, etak, sigma_read, sigma_write, sigma_Feynman,
+                 sigma_Screening, hole_particle, sigma_lmax, sigma_omre, w0,
+                 wratio, ek_Sig);
   }
 
   // Solve Brueckner orbitals (optionally, fit Sigma to exp energies)
@@ -475,10 +489,38 @@ Wavefunction ampsci(const IO::InputBlock &input) {
   }
 
   //----------------------------------------------------------------------------
+  const auto exotic = input.getBlock("Exotic");
+  input.check(
+      {"Exotic"},
+      {{"",
+        "Option for including `exotic` (e.g., muonic) atom states.\n"
+        "Adds them to end of valence list; usually valence should be empty.\n"
+        "Includes screening. Use muon module as test"},
+       {"mass", "Mass (in au=m_e) of exotic lepton [M_muon = 206.7682827]"},
+       {"mass_MeV", "Mass (in MeV) of exotic lepton [M_muon = 105.6583755 "
+                    "MeV]; will be overridden by the above au version"},
+       {"states", "Which states to calculate [1s]"}});
+  if (exotic && !exotic->has_option("help")) {
 
+    const auto states_str = exotic->get("states", std::string{"1s"});
+
+    const auto mass_MeV = exotic->get<double>("mass_MeV");
+    const auto mass = exotic->get(
+        "mass", mass_MeV ? *mass_MeV / PhysConst::m_e_MeV : PhysConst::m_muon);
+
+    wf.solve_exotic(states_str, mass, true);
+  }
+
+  //----------------------------------------------------------------------------
   const auto CI_in = input.getBlock("CI");
   if (CI_in) {
     wf.ConfigurationInteraction(*CI_in);
+  }
+
+  const auto json_out = input.get({"Atom"}, "json_out", false);
+  if (json_out) {
+    const std::string json_out_name = wf.identity() + ".json";
+    wf.output_to_json(json_out_name);
   }
 
   // run each of the modules with the calculated wavefunctions

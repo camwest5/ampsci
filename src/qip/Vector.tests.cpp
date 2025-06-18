@@ -109,7 +109,28 @@ TEST_CASE("qip::Vector", "[qip][Vector][unit]") {
     auto wz = w;
     wz += z;
     REQUIRE(wz == std::vector{2, 4, 3, 4, 5, 6});
+
+    REQUIRE(2 + z == std::vector{3, 4, 5, 6, 7, 8});
+    REQUIRE(z + 2 == std::vector{3, 4, 5, 6, 7, 8});
+    REQUIRE(z - 2 == std::vector{-1, 0, 1, 2, 3, 4});
+    REQUIRE(2 - z == -1 * z + 2);
   }
+
+  //============================================================================
+
+  REQUIRE(qip::reverse(std::vector{1, 2, 3, 4, 5, 6, 7, 8}) ==
+          std::vector{8, 7, 6, 5, 4, 3, 2, 1});
+
+  REQUIRE(qip::reverse(std::vector{1, 2, 3, 4, 5, 6, 7, 8, 9}) ==
+          std::vector{9, 8, 7, 6, 5, 4, 3, 2, 1});
+
+  REQUIRE(qip::reverse(std::vector{1, 2}) == std::vector{2, 1});
+
+  REQUIRE(qip::reverse(std::vector{1}) == std::vector{1});
+  REQUIRE(qip::reverse(std::vector<int>{}) == std::vector<int>{});
+
+  REQUIRE(qip::reverse(std::vector{1.0, 2.0, 3.0}) ==
+          std::vector{3.0, 2.0, 1.0});
 
   //============================================================================
 

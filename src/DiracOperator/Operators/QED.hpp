@@ -3,8 +3,8 @@
 #include "DiracOperator/Operators/hfs.hpp"
 #include "DiracOperator/TensorOperator.hpp"
 #include "IO/InputBlock.hpp"
-#include "Physics/FGRadPot.hpp"
 #include "Physics/PhysConst_constants.hpp"
+#include "Potentials/FGRadPot.hpp"
 #include "Wavefunction/Wavefunction.hpp"
 #include "qip/Vector.hpp"
 #include <cmath>
@@ -237,14 +237,16 @@ generate_MLVP(const IO::InputBlock &input, const Wavefunction &wf) {
       {{"rN",
         "Nuclear radius (in fm), for finite-nuclear size "
         "correction to Uehling loop. If not given, taken from wavefunction."},
-       {"options{}", "Options for hyperfine operator [see `ampsci -o hfs`]."}});
+       {"hfs_options{}",
+        "Options for hyperfine operator that sits inside the MLVP operator. "
+        " [see `ampsci -o hfs`]."}});
   if (input.has_option("help")) {
     return nullptr;
   }
 
   // 1. generate regular hfs operator
-  const auto t_options = input.getBlock("options");
-  const auto oper_options = t_options ? *t_options : IO::InputBlock{};
+  const auto t_options = input.getBlock("hfs_options");
+  auto oper_options = t_options ? *t_options : IO::InputBlock{};
 
   // 2. MLVP
   const auto rN_fm =

@@ -228,18 +228,20 @@ template <typename T>
 //! range will not be perfectly uniform, due to [first, ..., last] guarentee and
 //! rounding; also in this case same value may appear more than once if too-many
 //! steps are requested.
-template <typename T, typename N>
+template <typename T = double, typename N = std::size_t>
 std::vector<T> uniform_range(T first, T last, N number) {
   static_assert(std::is_arithmetic_v<T>,
                 "In uniform_range(T, T, N), T must be arithmetic");
   static_assert(std::is_integral_v<N>,
                 "In uniform_range(T, T, N), N must be integral");
-  assert(number >= 2);
-
   std::vector<T> range;
+  if (number == 0)
+    return range;
   range.reserve(static_cast<std::size_t>(number));
-  const auto interval = static_cast<double>(last - first);
   range.push_back(first); // guarentee first is first
+  if (number <= 1)
+    return range;
+  const auto interval = static_cast<double>(last - first);
   for (N i = 1; i < number - 1; ++i) {
     const auto eps = static_cast<double>(i) / static_cast<double>(number - 1);
     const auto value = static_cast<double>(first) + (eps * interval);
@@ -255,19 +257,22 @@ std::vector<T> uniform_range(T first, T last, N number) {
 //! range will not be perfectly logarithmic, due to [first, ..., last] guarentee
 //! and rounding; also in this case same value may appear more than once if
 //! too-many steps are requested.
-template <typename T, typename N>
+template <typename T = double, typename N = std::size_t>
 std::vector<T> logarithmic_range(T first, T last, N number) {
   static_assert(std::is_arithmetic_v<T>,
                 "In logarithmic_range(T, T, N), T must be arithmetic");
   static_assert(std::is_integral_v<N>,
                 "In logarithmic_range(T, T, N), N must be integral");
-  assert(number >= 2);
 
   std::vector<T> range;
+  if (number == 0)
+    return range;
   range.reserve(static_cast<std::size_t>(number));
+  range.push_back(first);
+  if (number <= 1)
+    return range;
   const auto log_ratio =
       std::log(static_cast<double>(last) / static_cast<double>(first));
-  range.push_back(first);
   for (N i = 1; i < number - 1; ++i) {
     const auto eps = static_cast<double>(i) / static_cast<double>(number - 1);
     const auto value = static_cast<double>(first) * std::exp(log_ratio * eps);
@@ -282,7 +287,7 @@ std::vector<T> logarithmic_range(T first, T last, N number) {
 //! guarenteed to be the first and last points in the range. T must be floating
 //! point. Range is roughly logarithmic for values below 'b', and linear for
 //! values above b. Not tested for negative values.
-template <typename T, typename N>
+template <typename T = double, typename N = std::size_t>
 std::vector<T> loglinear_range(T first, T last, T b, N number) {
   static_assert(std::is_floating_point_v<T>,
                 "In loglinear_range(T, T, T, N), T must be floating point");
@@ -387,6 +392,59 @@ void insert_into_if(const std::vector<T> &in, std::vector<T> *inout,
 }
 
 //==============================================================================
+//! Reverses a list
+template <typename T>
+std::vector<T> reverse(std::vector<T> in) {
+
+  std::size_t i = 0ul;
+  std::size_t f = in.size();
+
+  while (f > i + 1) {
+    std::swap(in[i], in[f - 1]);
+    ++i;
+    --f;
+  }
+
+  return in;
+}
+
+//==============================================================================
+//! Mean: xbar = \sum_i x_i / N
+template <typename T>
+T mean(std::vector<T> vec) {
+  T sum{0};
+  for (const auto &x : vec) {
+    sum += x;
+  }
+  return sum / T(vec.size());
+}
+
+//! Variance: \sum_i (x_i-xbar)^2 / (N-dof)
+template <typename T>
+T variance(std::vector<T> vec, std::size_t dof = 0) {
+  assert(dof < vec.size());
+  const auto xbar = mean(vec);
+  T sum{0};
+  for (const auto &x : vec) {
+    const auto del = x - xbar;
+    sum += del * del;
+  }
+  return sum / T(vec.size() - dof);
+}
+
+//! Standard deviation: sqrt(variance)
+template <typename T>
+T sdev(std::vector<T> vec, std::size_t dof = 0) {
+  return std::sqrt(variance(vec, dof));
+}
+
+//! Standard deviation: sqrt(variance)
+template <typename T>
+T sem(std::vector<T> vec, std::size_t dof = 0) {
+  return sdev(vec, dof) / std::sqrt(T(vec.size()));
+}
+
+//==============================================================================
 //==============================================================================
 //! namespace qip::overloads provides operator overloads for std::vector
 namespace overloads {
@@ -454,6 +512,44 @@ std::vector<T> &operator/=(std::vector<T> &v, U x) {
 template <typename T, typename U>
 std::vector<T> operator/(std::vector<T> v, U x) {
   return v /= x;
+}
+
+// Provide scalar addition
+template <typename T, typename U>
+std::vector<T> &operator+=(std::vector<T> &v, U x) {
+  if (x != U{0}) {
+    for (auto &v_i : v) {
+      v_i += x;
+    }
+  }
+  return v;
+}
+template <typename T, typename U>
+std::vector<T> operator+(std::vector<T> v, U x) {
+  return v += x;
+}
+template <typename T, typename U>
+std::vector<T> operator+(U x, std::vector<T> v) {
+  return v += x;
+}
+// Provide scalar subtraction
+template <typename T, typename U>
+std::vector<T> &operator-=(std::vector<T> &v, U x) {
+  if (x != U{0}) {
+    for (auto &v_i : v) {
+      v_i -= x;
+    }
+  }
+  return v;
+}
+template <typename T, typename U>
+std::vector<T> operator-(std::vector<T> v, U x) {
+  return v -= x;
+}
+template <typename T, typename U>
+std::vector<T> operator-(U x, std::vector<T> v) {
+  v *= U{-1};
+  return v += x;
 }
 
 // Provide scalar devision, vector in denominator

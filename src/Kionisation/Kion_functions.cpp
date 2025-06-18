@@ -1,5 +1,5 @@
 #include "Kion_functions.hpp"
-#include "DiracOperator/DiracOperator.hpp"
+#include "DiracOperator/include.hpp"
 #include "ExternalField/DiagramRPA.hpp"
 #include "ExternalField/DiagramRPA0_jL.hpp"
 #include "HF/HartreeFock.hpp"
@@ -157,8 +157,8 @@ std::vector<LinAlg::Matrix<double>> calculateK_nk_rpa(
       rpa.update_t0s(); // Udate t0, since JL(q) changed
       rpa.solve_core(0.0, max_rpa_its, false);
       fmt::print("RPA: L={}, q={:7.2f} au [{}/{}], eps={:.1e}, its={} \r", L, q,
-                 iq + 1, qsteps, rpa.get_eps(), rpa.get_its());
-      if (rpa.get_eps() > 1.0e-5)
+                 iq + 1, qsteps, rpa.last_eps(), rpa.last_its());
+      if (rpa.last_eps() > 1.0e-5)
         std::cout << " **\n";
       std::cout << std::flush;
 #pragma omp parallel for collapse(2)

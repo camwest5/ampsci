@@ -7,6 +7,7 @@
 #include <vector>
 class Grid;
 
+//! Functions and classes used to solve the Dirac equation.
 namespace DiracODE {
 
 //==============================================================================
@@ -28,7 +29,7 @@ void boundState(DiracSpinor &Fa, const double en0, const std::vector<double> &v,
                 double mass = 1.0);
 
 inline DiracSpinor boundState(int n, int kappa, const double en0,
-                              std::shared_ptr<const Grid> &gr,
+                              const std::shared_ptr<const Grid> &gr,
                               const std::vector<double> &v,
                               const std::vector<double> &H_off_diag = {},
                               const double alpha = PhysConst::alpha,

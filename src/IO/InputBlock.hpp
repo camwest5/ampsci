@@ -355,7 +355,7 @@ std::optional<T> InputBlock::get(std::string_view key) const {
       return std::nullopt;
     const auto &str = option->value_str;
     if (qip::ci_wc_compare("true", str) || qip::ci_wc_compare("yes", str) ||
-        qip::ci_wc_compare("y", str) || qip::ci_wc_compare("1", str))
+        qip::ci_wc_compare("y", str))
       return true;
     return false;
   } else {

@@ -30,10 +30,6 @@ DiagramRPA::DiagramRPA(const DiracOperator::TensorOperator *const h,
   // Set up basis:
   const auto &core = p_hf->core();
   for (const auto &Fi : basis) {
-    // NB: this makes a huge difference! Try to implement somehow
-    // NB: Need to be careful: same basis used when reading W in!
-    // if (max_de > 0.0 && std::abs(Fi.en()) > max_de)
-    //   continue;
     const bool inCore = std::find(cbegin(core), cend(core), Fi) != cend(core);
     if (inCore) {
       holes.push_back(Fi);
@@ -53,19 +49,10 @@ DiagramRPA::DiagramRPA(const DiracOperator::TensorOperator *const h,
   // Setup faster Breit
   if (p_hf->vBreit() != nullptr) {
     m_Br = *p_hf->vBreit();
-    m_Br->fill_gb(basis);
+    // nb: This uses HUGE amount of memory, leads to ~2x speedup
+    // Decided not worth the speedup
+    // m_Br->fill_gb(basis);
   }
-
-  // if constexpr (m_USE_QK) {
-  //   std::cout << "\nFill Qk table:\n";
-  //   const auto ok = m_qk.read(fname);
-  //   if (!ok) {
-  //     // doesn't work with Breit!?
-  //     Coulomb::YkTable Yk(basis);
-  //     m_qk.fill(basis, Yk);
-  //     m_qk.write(fname);
-  //   }
-  // } else {
 
   // Attempt to read W's from a file:
   const auto read_ok = read_write(fname, IO::FRW::read);
@@ -219,10 +206,8 @@ void DiagramRPA::fill_W_matrix(const DiracOperator::TensorOperator *const h) {
             const auto yQ = Yee.Q(m_rank, Fa, Fb, Fm, Fn);
             const auto yP = Yhe.P(m_rank, Fa, Fb, Fm, Fn);
             // Breit Contribution to core:
-            const auto xB =
-                m_Br ? m_Br->BWk_abcd_2(m_rank, Fa, Fn, Fm, Fb) : 0.0;
-            const auto yB =
-                m_Br ? m_Br->BWk_abcd_2(m_rank, Fa, Fb, Fm, Fn) : 0.0;
+            const auto xB = m_Br ? m_Br->BWk_abcd(m_rank, Fa, Fn, Fm, Fb) : 0.0;
+            const auto yB = m_Br ? m_Br->BWk_abcd(m_rank, Fa, Fb, Fm, Fn) : 0.0;
 
             Wanm_b.push_back(xQ + xP + xB);
             Wabm_n.push_back(yQ + yP + yB);
@@ -270,10 +255,8 @@ void DiagramRPA::fill_W_matrix(const DiracOperator::TensorOperator *const h) {
             const auto yQ = Yhe.Q(m_rank, Fm, Fb, Fa, Fn);
             const auto yP = Yhh.P(m_rank, Fm, Fb, Fa, Fn);
             // nb: Breit part not double-checked! XXX
-            const auto xB =
-                m_Br ? m_Br->BWk_abcd_2(m_rank, Fm, Fn, Fa, Fb) : 0.0;
-            const auto yB =
-                m_Br ? m_Br->BWk_abcd_2(m_rank, Fm, Fb, Fa, Fn) : 0.0;
+            const auto xB = m_Br ? m_Br->BWk_abcd(m_rank, Fm, Fn, Fa, Fb) : 0.0;
+            const auto yB = m_Br ? m_Br->BWk_abcd(m_rank, Fm, Fb, Fa, Fn) : 0.0;
             Wanm_b.push_back(xQ + xP + xB);
             Wabm_n.push_back(yQ + yP + yB);
           }
@@ -384,12 +367,10 @@ double DiagramRPA::dV_diagram(const DiracSpinor &Fw,
         continue;
       const auto s2 = ((Fa.twoj() - Fm.twoj()) % 4 == 0) ? 1 : -1;
       // Calculate Wk from scratch here: Fi/Ff may be valence.
-      const auto Wwmva =
-          Coulomb::Wk_abcd(m_rank, Ff, Fm, Fi, Fa) +
-          (m_Br ? m_Br->BWk_abcd_2(m_rank, Ff, Fm, Fi, Fa) : 0.0);
-      const auto Wwavm =
-          Coulomb::Wk_abcd(m_rank, Ff, Fa, Fi, Fm) +
-          (m_Br ? m_Br->BWk_abcd_2(m_rank, Ff, Fa, Fi, Fm) : 0.0);
+      const auto Wwmva = Coulomb::Wk_abcd(m_rank, Ff, Fm, Fi, Fa) +
+                         (m_Br ? m_Br->BWk_abcd(m_rank, Ff, Fm, Fi, Fa) : 0.0);
+      const auto Wwavm = Coulomb::Wk_abcd(m_rank, Ff, Fa, Fi, Fm) +
+                         (m_Br ? m_Br->BWk_abcd(m_rank, Ff, Fa, Fi, Fm) : 0.0);
       const auto ttam = tam[ia][im];
       const auto ttma = tma[im][ia];
       const auto A = ttam * Wwmva / (Fa.en() - Fm.en() - ww);
@@ -403,39 +384,48 @@ double DiagramRPA::dV_diagram(const DiracSpinor &Fw,
 //==============================================================================
 void DiagramRPA::solve_core(const double omega, int max_its, const bool print) {
 
+  const auto eps_targ = m_eps;
+  const auto a_damp = m_eta;
+  const auto b_damp = 1.0 - a_damp;
+
   m_core_omega = std::abs(omega);
 
   if (holes.empty() || excited.empty())
     return;
 
   if (m_h->freqDependantQ()) {
-    // m_h->updateFrequency(m_core_omega); // Cant, is const. must do outside
     setup_ts(m_h);
   }
 
   if (print) {
-    printf("RPA(D) %s (w=%.3f): ", m_h->name().c_str(), omega);
+    fmt::print("RPA(D) {:s} (w={:.4f}): ", m_h->name(), omega);
     std::cout << std::flush;
   }
 
-  int it = 0;
+  int it = 1;
   auto eps = 0.0;
+  std::string s_worst;
   const auto f = (1.0 / (2 * m_rank + 1));
+
   for (; it < max_its; it++) {
-    std::vector<double> eps_m(excited.size()); //"thread-safe" eps..?
-// XXX "Small" race condition in here???
+
+    std::vector<std::pair<double, std::string>> eps_m(excited.size());
+    // Use these internally - should be values from previous iteration!
+    const auto Tnb = tma;
+    const auto Tbn = tam;
+
 #pragma omp parallel for
     for (std::size_t im = 0; im < excited.size(); im++) {
       const auto &Fm = excited[im];
+
       double eps_worst_a = 0.0;
+      std::string t_worst;
       for (std::size_t ia = 0; ia < holes.size(); ia++) {
         const auto &Fa = holes[ia];
 
         double sum_am = 0.0;
         double sum_ma = 0.0;
 
-        // Can replace this with dV?? NO. 1) it calcs W (since valence)
-        // 2) not thread safe
         for (std::size_t ib = 0; ib < holes.size(); ib++) {
           const auto &Fb = holes[ib];
           const auto s1 =
@@ -445,21 +435,13 @@ void DiagramRPA::solve_core(const double omega, int max_its, const bool print) {
           for (std::size_t in = 0; in < excited.size(); in++) {
             const auto &Fn = excited[in];
 
-            const auto tbn = tam[ib][in];
+            const auto tbn = Tbn[ib][in];
             if (tbn == 0.0)
               continue;
-            const auto tnb = tma[in][ib];
+            const auto tnb = Tnb[in][ib];
             const auto tdem = tbn / (Fb.en() - Fn.en() - m_core_omega);
             const auto s2 = ((Fb.twoj() - Fn.twoj()) % 4 == 0) ? 1 : -1;
             const auto stdep = s2 * tnb / (Fb.en() - Fn.en() + m_core_omega);
-            // if constexpr (m_USE_QK) {
-            //   const auto A = tdem * m_qk.W(m_rank, Fa, Fn, Fm, Fb);
-            //   const auto B = stdep * m_qk.W(m_rank, Fa, Fb, Fm, Fn);
-            //   const auto C = tdem * m_qk.W(m_rank, Fm, Fn, Fa, Fb);
-            //   const auto D = stdep * m_qk.W(m_rank, Fm, Fb, Fa, Fn);
-            //   sum_am += s1 * (A + B);
-            //   sum_ma += s3 * (C + D);
-            // } else
             {
               const auto A = tdem * Wanmb[ia][in][im][ib];
               const auto B = stdep * Wabmn[ia][in][im][ib];
@@ -471,27 +453,37 @@ void DiagramRPA::solve_core(const double omega, int max_its, const bool print) {
           }
         }
 
+        // Update core-excited matrix elements, including damping
         const auto prev = tam[ia][im];
-        // 0.5 factor is for damping. f*sum is dV
-        tam[ia][im] = 0.5 * (tam[ia][im] + t0am[ia][im] + f * sum_am);
-        tma[im][ia] = 0.5 * (tma[im][ia] + t0ma[im][ia] + f * sum_ma);
-        const auto delta = std::abs((tam[ia][im] - prev) / tam[ia][im]);
-        if (delta > eps_worst_a)
+        tam[ia][im] =
+            a_damp * tam[ia][im] + b_damp * (t0am[ia][im] + f * sum_am);
+        tma[im][ia] =
+            a_damp * tma[im][ia] + b_damp * (t0ma[im][ia] + f * sum_ma);
+        const auto delta =
+            2.0 * std::abs((tam[ia][im] - prev) / (prev + tam[ia][im]));
+
+        if (delta > eps_worst_a) {
           eps_worst_a = delta;
-      } // a (holes)
-      eps_m[im] = eps_worst_a;
-    } // m (excited)
-    // XXX "small" race condition somewhere regarding eps??
-    // The itteraion it converges on always seems to be the same..
-    // but the value for eps printed changes slightly each run???
-    eps = *std::max_element(cbegin(eps_m), cend(eps_m));
+          t_worst = Fa.shortSymbol() + "," + Fm.shortSymbol();
+        }
+      }
+      eps_m[im] = {eps_worst_a, t_worst};
+    }
+
+    const auto teps =
+        *std::max_element(cbegin(eps_m), cend(eps_m),
+                          [](auto &a, auto &b) { return a.first < b.first; });
+    eps = teps.first;
+    s_worst = teps.second;
     if (eps < eps_targ)
       break;
-  } // its
+  }
+
   if (print) {
-    printf("%2i %.1e\n", it, eps);
+    printf("%2i %.1e [%s]\n", it, eps, s_worst.c_str());
     std::cout << std::flush;
   }
+
   m_core_eps = eps;
   m_core_its = it;
 }

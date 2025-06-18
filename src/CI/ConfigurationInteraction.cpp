@@ -1,9 +1,9 @@
 #include "ConfigurationInteraction.hpp"
-#include "Angular/Angular.hpp"
+#include "Angular/include.hpp"
 #include "CI_Integrals.hpp"
 #include "CSF.hpp"
-#include "Coulomb/Coulomb.hpp"
-#include "DiracOperator/DiracOperator.hpp"
+#include "Coulomb/include.hpp"
+#include "DiracOperator/include.hpp"
 #include "ExternalField/calcMatrixElements.hpp"
 #include "IO/InputBlock.hpp"
 #include "LinAlg/Matrix.hpp"
@@ -286,7 +286,7 @@ std::vector<PsiJPi> configuration_interaction(const IO::InputBlock &input,
                                  (max_k_Coulomb >= 0 && max_k_Coulomb < 50 ?
                                       "_" + std::to_string(max_k_Coulomb) :
                                       "") +
-                                 ".sk");
+                                 ".sk.abf");
 
     std::cout << "Calculate two-body MBPT integrals: Σ^k_abcd\n";
 

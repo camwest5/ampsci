@@ -4,11 +4,12 @@
 #include "MBPT/CorrelationPotential.hpp"
 #include "Maths/Grid.hpp"
 #include "Physics/AtomData.hpp"
-#include "Physics/NuclearPotentials.hpp"
 #include "Physics/PhysConst_constants.hpp"
-#include "Physics/RadPot.hpp"
+#include "Potentials/NuclearPotentials.hpp"
+#include "Potentials/RadPot.hpp"
 #include "Wavefunction/BSplineBasis.hpp"
 #include "Wavefunction/DiracSpinor.hpp"
+#include "json/json.hpp"
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -59,6 +60,7 @@ private:
   Nuclear::Nucleus m_nucleus;
   // Valence (single-particle) orbitals
   std::vector<DiracSpinor> m_valence{};
+  std::vector<DiracSpinor> m_hf_valence{};
   // Basis, daigonalised over HF core. Used for MBPT
   std::vector<DiracSpinor> m_basis{};
   // Sprectrum: like basis, but includes Sigma (correlations).
@@ -109,6 +111,8 @@ public:
   //! Valence orbitals (HF or Brueckner orbitals)
   const std::vector<DiracSpinor> &valence() const { return m_valence; }
   std::vector<DiracSpinor> &valence() { return m_valence; }
+
+  const std::vector<DiracSpinor> &hf_valence() const { return m_hf_valence; }
 
   //! Basis, eigenstates of HF potential. Used for MBPT. Includes Breit and
   //! QED (if they are included), but not correlations
@@ -248,6 +252,15 @@ public:
   void solve_valence(const std::string &in_valence_str = "",
                      const bool print = true);
 
+  //! @brief Solves for exotic atoms (e.g., muonic), including screening.
+  //! Resulting states are included in valence; the screening also updates core.
+  //! @details
+  //! Note: The exotic states are just added to the valence list, so they can be
+  //! used more simply with all the modules.
+  //! However, be careful; for example, RPA will now be meaningless!
+  void solve_exotic(const std::string &in_exotic_str,
+                    double mass = PhysConst::m_muon, bool print = true);
+
   //! Forms Bruckner valence orbitals: (H_hf + Sigma)|nk> = e|nk>. Replaces
   //! existing valence states
   void hartreeFockBrueckner(const bool print = true);
@@ -275,7 +288,7 @@ public:
   void formSigma(int nmin_core = 1, int nmin_core_F = 1, double r0 = 1.0e-4,
                  double rmax = 30.0, int stride = 4, bool each_valence = false,
                  bool include_G = false, bool include_Breit = false,
-                 const std::vector<double> &lambdas = {},
+                 int n_max_breit = 0, const std::vector<double> &lambdas = {},
                  const std::vector<double> &fk = {},
                  const std::vector<double> &etak = {},
                  const std::string &in_fname = "",
@@ -318,7 +331,13 @@ public:
 
   double Hab(const DiracSpinor &Fa, const DiracSpinor &Fb) const;
 
+  //! Runs the CI+MBPT routines; stores wavefunctions
   void ConfigurationInteraction(const IO::InputBlock &input);
+
+  //! Writes wavefunction information to json file;
+  //! if out_name given, will print to that file
+  nlohmann::json
+  output_to_json(const std::string &out_name = "ampsci_output.json");
 
 private:
   double H0ab_impl(const DiracSpinor &Fa, std::vector<double> dga,

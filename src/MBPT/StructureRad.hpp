@@ -1,5 +1,5 @@
 #pragma once
-#include "Coulomb/Coulomb.hpp"
+#include "Coulomb/include.hpp"
 #include "Coulomb/meTable.hpp"
 #include "IO/FRW_fileReadWrite.hpp"
 #include "Wavefunction/DiracSpinor.hpp"
@@ -64,10 +64,14 @@ public:
   */
   StructureRad(const std::vector<DiracSpinor> &basis, double en_core,
                std::pair<int, int> nminmax = {0, 999},
-               const std::string &Qk_fname = "");
+               const std::string &Qk_fname = "",
+               const std::vector<double> &fk = {},
+               const std::vector<double> &etak = {});
 
 private:
   bool m_use_Qk;
+  std::vector<double> m_root_fk; // sqrt - add to both sides!
+  std::vector<double> m_etak;
   Coulomb::YkTable mY{};
   std::optional<Coulomb::QkTable> mQ{std::nullopt}; //?
   // nb: it seems conter-intuative, but this copy makes it FASTER!
@@ -77,6 +81,7 @@ public:
   const std::vector<DiracSpinor> &core() const { return mCore; }
   const std::vector<DiracSpinor> &excited() const { return mExcited; }
 
+  //! Returns reference to Yk table. NOTE: may not be initialised!
   const Coulomb::YkTable &Yk() const { return mY; }
   const std::optional<Coulomb::QkTable> &Qk() const { return mQ; }
 
@@ -113,6 +118,18 @@ public:
     return {tb + c + n, dvtb + dvc + dvn};
   }
 
+  //! Effective screening factor for Coulomb lines
+  double f_root_scr(int k) const {
+    const auto sk = std::size_t(k);
+    return sk < m_root_fk.size() ? m_root_fk[sk] : 1.0;
+  }
+
+  //! Effective hole-particle factor for polarisation loops
+  double eta_hp(int k) const {
+    const auto sk = std::size_t(k);
+    return sk < m_etak.size() ? m_etak[sk] : 1.0;
+  }
+
   //! Returns Brueckner orbital contribution to the, reduced ME: <w||h||v>_norm.
   //! Returns a pair: {N, N+dV}: second includes RPA (if dV given).
   //! @details from 10.1006/adnd.1996.0024
@@ -121,6 +138,9 @@ public:
      const DiracSpinor &v,
      const ExternalField::CorePolarisation *const dV = nullptr, double fw = 1.0,
      double fv = 1.0) const;
+
+  //! Calculates <v|Sigma|w>
+  double Sigma_vw(const DiracSpinor &v, const DiracSpinor &w) const;
 
   //! constructs an me table of {srn, srn+dv} for each pair or {a,b}
   Coulomb::meTable<std::pair<double, double>>
@@ -170,17 +190,22 @@ private:
   //
   double Q(int k, const DiracSpinor &a, const DiracSpinor &b,
            const DiracSpinor &c, const DiracSpinor &d) const {
-    return m_use_Qk ? mQ->Q(k, a, b, c, d) : mY.Q(k, a, b, c, d);
+    // inlcudes effective Coulomb screening
+    const auto fk = f_root_scr(k);
+    return m_use_Qk ? fk * mQ->Q(k, a, b, c, d) : fk * mY.Q(k, a, b, c, d);
   }
 
   double P(int k, const DiracSpinor &a, const DiracSpinor &b,
            const DiracSpinor &c, const DiracSpinor &d) const {
-    return m_use_Qk ? mQ->P(k, a, b, c, d) : mY.P(k, a, b, c, d);
+    // inlcudes effective Coulomb screening
+    return m_use_Qk ? mQ->P2(k, a, b, c, d, mY.SixJ(), m_root_fk) :
+                      mY.P2(k, a, b, c, d, m_root_fk);
   }
 
   double W(int k, const DiracSpinor &a, const DiracSpinor &b,
            const DiracSpinor &c, const DiracSpinor &d) const {
-    return m_use_Qk ? mQ->W(k, a, b, c, d) : mY.W(k, a, b, c, d);
+    // inlcudes effective Coulomb screening
+    return Q(k, a, b, c, d) + P(k, a, b, c, d);
   }
 };
 

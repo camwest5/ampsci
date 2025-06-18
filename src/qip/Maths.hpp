@@ -1,4 +1,5 @@
 #pragma once
+#include "Vector.hpp"
 #include <cmath>
 #include <type_traits>
 
@@ -85,7 +86,7 @@ T max_difference(T first, Args... rest) {
 //! (T). Returns double for inverse powers, T otherwise
 template <int n, typename T>
 constexpr auto pow(T x) {
-  static_assert(std::is_arithmetic_v<T>, "In pow(T x), T must be arithmetic");
+  using namespace qip::overloads;
   // Returns double for inverse powers, T otherwise
   if constexpr (n < 0) {
     return double(1.0) / pow<-n>(x);
@@ -113,6 +114,25 @@ constexpr T pow(T x, int n) {
     result *= x;
   }
   return result;
+}
+
+//==============================================================================
+//! Factorial x! - nb: does not check for overflow. Max x is 20 for uint64_t.
+//! Note: returns 1 for arguments <0
+template <typename T>
+constexpr T factorial(T x) {
+  static_assert(std::is_integral_v<T>,
+                "In factorial(T), T must be an integral type");
+  return (x <= 1) ? 1 : x * factorial<T>(x - 1);
+}
+
+//! Double factorial x!! - nb: does not check for overflow. Max x is 20 for uint64_t
+template <typename T>
+constexpr T double_factorial(T x) {
+  static_assert(std::is_integral_v<T>,
+                "double_factorial(T): T must be an integral type");
+
+  return (x <= 1) ? 1 : x * double_factorial<T>(x - 2);
 }
 
 //==============================================================================

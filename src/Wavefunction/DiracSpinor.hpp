@@ -77,6 +77,9 @@ private:
   int m_kappa_index;
   Index m_nkappa_index;
 
+  // flag for regular electron, or "exotic"
+  bool m_exotic{false};
+
 public:
   //! Principal quantum number, n
   int n() const { return m_n; }
@@ -99,6 +102,11 @@ public:
   std::string symbol(bool gnuplot = false) const;
   //! e.g., 6p_1/2 => 6p-, 6p_3/2 => 6p+
   std::string shortSymbol() const;
+
+  //! Checks if spinor is for "exotic" lepton, or regular electron
+  bool &exotic() { return m_exotic; }
+  //! Checks if spinor is for "exotic" lepton, or regular electron
+  bool exotic() const { return m_exotic; }
 
   //! Changes 'kappa' angular quantum number. Use with caution!
   void set_new_kappa(int new_kappa);
@@ -249,6 +257,9 @@ public:
   orthonormaliseWrt(const DiracSpinor &Fin,
                     const std::vector<DiracSpinor> &orbs);
 
+  //! A more correct way to force orthogonality than normal
+  void orthog(const DiracSpinor &rhs);
+
   //! e.g., 6p_1/2 => 6p-, 6p_3/2 => 6p+
   static std::string shortSymbol(int n, int kappa);
 
@@ -272,11 +283,29 @@ public:
   //! Returns maximum kappa_index found in {orbs}
   static int max_kindex(const std::vector<DiracSpinor> &orbs);
 
+  //! Splits orbitals into two groups (i.e., core, excited) by energy
+  //! @details
+  //! - The first group contains orbitals with energy < energy
+  //! - The second group contains orbitals with energy > energy
+  //! - The first group is also limited to have n >= n_min_core (i.e., exclude
+  //! deep core states)
   static std::pair<std::vector<DiracSpinor>, std::vector<DiracSpinor>>
   split_by_energy(const std::vector<DiracSpinor> &orbitals, double energy,
                   int n_min_core = 1);
 
+  //! Splits orbitals into two groups (i.e., core, excited).
+  //! @details
+  //! - The first group contains orbitals with {n,kappa} in the given "core"
+  //! - The second group contains all of the rest
+  //! - The first group is also limited to have n >= n_min_core (i.e., exclude
+  //! deep core states)
   static std::pair<std::vector<DiracSpinor>, std::vector<DiracSpinor>>
   split_by_core(const std::vector<DiracSpinor> &orbitals,
                 const std::vector<DiracSpinor> &core, int n_min_core = 1);
+
+  //! Takes a subset of an input basis (by copy), according to subset_string
+  //! @details
+  //! - Includes only states matching the subset_string
+  static std::vector<DiracSpinor> subset(const std::vector<DiracSpinor> &basis,
+                                         const std::string &subset_string);
 };

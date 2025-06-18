@@ -1,5 +1,5 @@
 #include "lifetimes.hpp"
-#include "DiracOperator/DiracOperator.hpp" //For E1 operator
+#include "DiracOperator/include.hpp" //For E1 operator
 #include "ExternalField/DiagramRPA.hpp"
 #include "ExternalField/TDHF.hpp"
 #include "ExternalField/calcMatrixElements.hpp"
@@ -244,7 +244,7 @@ void lifetimes(const IO::InputBlock &input, const Wavefunction &wf) {
 
     // std::cout << "\n";
     printf("𝚪(%3s) = %.6e au\n", i.shortSymbol().c_str(), G_E1 + G_E2 + G_M1);
-    const auto tau_s = PhysConst::time_s / (G_E1 + G_E2 + G_M1);
+    const auto tau_s = PhysConst::hbar_on_EH / (G_E1 + G_E2 + G_M1);
     printf("𝜏(%3s) = %.6e s\n", i.shortSymbol().c_str(), tau_s);
     results.push_back({i.shortSymbol(), tau_s});
   }

@@ -1,9 +1,8 @@
-#include "Physics/NuclearPotentials.hpp"
+#include "Potentials/NuclearPotentials.hpp"
 #include "IO/FRW_fileReadWrite.hpp"
 #include "Maths/Grid.hpp"
 #include "Maths/Interpolator.hpp"
 #include "Maths/NumCalc_quadIntegrate.hpp"
-#include "NuclearData.hpp" //for Isotope
 #include "Physics/AtomData.hpp"
 #include "Physics/NuclearData.hpp"
 #include "Physics/PhysConst_constants.hpp"
@@ -219,7 +218,7 @@ Nucleus form_nucleus(int Z, std::optional<int> tA, IO::InputBlock input) {
 
   // If A or given rrms are zero, explicitly set to point-like nucleus
   // This isn't required, but makes output more explicit
-  if (nucleus.a() == 0.0 || nucleus.r_rms() == 0.0) {
+  if (nucleus.a() == 0 || nucleus.r_rms() == 0.0) {
     nucleus.t() = 0.0;
     nucleus.set_rrms(0.0);
     nucleus.beta() = 0.0;

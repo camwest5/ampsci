@@ -1,6 +1,6 @@
 #include "Wavefunction/Wavefunction.hpp"
-#include "CI/CI.hpp"
-#include "DiracODE/DiracODE.hpp"
+#include "CI/include.hpp"
+#include "DiracODE/include.hpp"
 #include "HF/HartreeFock.hpp"
 #include "IO/ChronoTimer.hpp"
 #include "IO/FRW_fileReadWrite.hpp" //just for enum..
@@ -8,9 +8,9 @@
 #include "Maths/Grid.hpp"
 #include "Maths/NumCalc_quadIntegrate.hpp"
 #include "Physics/AtomData.hpp"
-#include "Physics/NuclearPotentials.hpp"
-#include "Physics/Parametric_potentials.hpp"
 #include "Physics/PhysConst_constants.hpp"
+#include "Potentials/NuclearPotentials.hpp"
+#include "Potentials/Parametric_potentials.hpp"
 #include "Wavefunction/BSplineBasis.hpp"
 #include "Wavefunction/DiracSpinor.hpp"
 #include "fmt/color.hpp"
@@ -213,6 +213,7 @@ void Wavefunction::solve_valence(const std::string &in_valence_str,
       DiracODE::boundState(Fv, e0, vlocal(), {}, m_alpha, 1.0e-14);
     }
   }
+  m_hf_valence = m_valence;
 }
 
 //==============================================================================
@@ -505,7 +506,7 @@ void Wavefunction::formSpectrum(const SplineBasis::Parameters &params) {
 //==============================================================================
 void Wavefunction::formSigma(
     int nmin_core, int nmin_core_F, double r0, double rmax, int stride,
-    bool each_valence, bool include_G, bool include_Breit,
+    bool each_valence, bool include_G, bool include_Breit, int n_max_breit,
     const std::vector<double> &lambdas, const std::vector<double> &fk,
     const std::vector<double> &etak, const std::string &in_fname,
     const std::string &out_fname, bool FeynmanQ, bool ScreeningQ,
@@ -547,7 +548,7 @@ void Wavefunction::formSigma(
 
   m_Sigma = MBPT::CorrelationPotential(
       ifname, &*m_HF, m_basis, r0, rmax, std::size_t(stride), nmin_core, method,
-      include_G, include_Breit,
+      include_G, include_Breit, n_max_breit,
       MBPT::FeynmanOptions{screening, hp, lmax, omre, w0, wratio}, calculate_fk,
       fk, etak, nmin_core_F);
 
@@ -780,4 +781,242 @@ void Wavefunction::ConfigurationInteraction(const IO::InputBlock &input) {
   IO::ChronoTimer t("CI");
   m_CIwfs = CI::configuration_interaction(input, *this);
   std::cout << "\n";
+}
+
+//==============================================================================
+void Wavefunction::solve_exotic(const std::string &in_exotic_str, double mass,
+                                bool print) {
+
+  using namespace qip::overloads;
+
+  const auto states = AtomData::listOfStates_nk(in_exotic_str);
+
+  if (print) {
+    std::cout << "\n---------------------------------------------\n";
+    std::cout << "Exotic " << AtomData::atomicSymbol(this->Znuc()) << "\n";
+    fmt::print("M = {:.8f} m_e = {:.12f} MeV\n\n", mass,
+               mass * PhysConst::m_e_MeV);
+
+    std::cout << "Energies - without screening:\n";
+    std::cout << "nk    Rinf  eps    R_rms (a0)    E (au)            E "
+                 "(keV)\n";
+  }
+
+  std::optional<DiracSpinor> Fscreen;
+  for (const auto [n, kappa, x_en] : states) {
+
+    // initial energy guess:
+    const auto e0 =
+        mass * AtomData::diracen(this->Znuc(), n, kappa, this->alpha());
+
+    // nuclear potential (+QED). Note: only Uehling is really OK here.
+    const auto v0 = this->vnuc() + (this->vrad() ? this->vrad()->Vel() :
+                                                   std::vector<double>{});
+    auto Fnk = DiracODE::boundState(
+        n, kappa, e0, this->grid_sptr(), v0, this->Hmag(), this->alpha(),
+        1.0e-14, nullptr, nullptr, double(this->Znuc()), mass);
+
+    Fnk.exotic() = true;
+
+    const auto R_rms =
+        std::sqrt(Fnk * (this->grid().r() * this->grid().r() * Fnk));
+
+    this->valence().push_back(Fnk);
+
+    if (!Fscreen) {
+      Fscreen = Fnk;
+    }
+
+    if (print) {
+      fmt::print("{:4s} {:5.2f}  {:5.0e}  {:.5e}  {:.9e}  {:.9e}\n",
+                 Fnk.shortSymbol(), Fnk.rinf(), Fnk.eps(), R_rms, Fnk.en(),
+                 Fnk.en() * PhysConst::Hartree_eV / 1.0e3);
+    }
+  }
+
+  if (!this->core().empty() && Fscreen) {
+    // make a _copy_ of the Hartree-Fock object for doing muon+electron HF
+    // We include muon screening by temporarily updating Vnuc
+    // (Can't add it to the core, since we must exclude exchange!)
+    auto hf = *this->vHF();
+    auto Fmu = *Fscreen;
+
+    // Iterate screening of Hartree-Fock including muon
+    if (print) {
+      std::cout << "\nHartree-Fock for screening:\n";
+      std::cout << "(Including the exotic " << Fmu.shortSymbol()
+                << " state into direct part of HF)\n";
+      fmt::print("it {:8s}  {:8s}  {:8s}\n", "HF_core", "electron", "exotic");
+    }
+    for (int it = 1; it < 100; ++it) {
+      // Direct potential due to single muon:
+      const auto Vmu = Coulomb::yk_ab(0, Fmu, Fmu);
+      // Convenient: just add it to the nuclear potential:
+      // Note: modify the copy of HF only. Be careful
+      hf.vnuc() = this->vnuc() + Vmu;
+      const auto E0 = hf.calculateCoreEnergy();
+      const auto [elhf_eps, core_its, symbol] = hf.solve_core(false);
+      const auto E1 = hf.calculateCoreEnergy();
+      const auto eps_core = std::abs(E1 / E0 - 1.0);
+      const auto v =
+          hf.vdir() + this->vnuc() +
+          (this->vrad() ? this->vrad()->Vel() : std::vector<double>{});
+      const auto en0 = Fmu.en();
+      DiracODE::boundState(Fmu, en0, v, this->Hmag(), this->alpha(), 1.0e-14,
+                           nullptr, nullptr, double(this->Znuc()), mass);
+
+      const auto eps_mu = std::abs(Fmu.en() / en0 - 1.0);
+
+      if (print) {
+        fmt::print("{:<2} {:.1e}   {:.1e}   {:.1e}\n", it, elhf_eps, eps_core,
+                   eps_mu);
+      }
+      // check for convergance:
+      if (it > 2 && std::max(eps_mu, eps_core) < 1.0e-13)
+        break;
+    }
+
+    // Not really needed, but update HF in wavefunction:
+    // Remember to not include muon in Vnuc
+    hf.vnuc() = this->vnuc();
+    *this->vHF() = hf;
+
+    if (print) {
+      std::cout << "\nCore (including screening by exotic "
+                << Fscreen->shortSymbol() << "):\n";
+      this->printCore();
+      printf("E_c = %.6f\n\n", this->coreEnergyHF());
+    }
+
+    // Re-solve the muon states in the screened HF potential (just direct part)
+    if (print) {
+      std::cout << "Exotic energies - with screening:\n";
+      std::cout << "nk    Rinf  eps    R_rms (a0)    E (au)            E "
+                   "(keV)\n";
+    }
+    for (auto &Fnk : this->valence()) {
+
+      const auto v =
+          hf.vdir() + this->vnuc() +
+          (this->vrad() ? this->vrad()->Vel() : std::vector<double>{});
+      DiracODE::boundState(Fnk, Fnk.en(), this->vlocal(), this->Hmag(),
+                           this->alpha(), 1.0e-14, nullptr, nullptr,
+                           double(this->Znuc()), mass);
+
+      if (print) {
+        const auto R_rms =
+            std::sqrt(Fnk * (this->grid().r() * this->grid().r() * Fnk));
+        fmt::print("{:4s} {:5.2f}  {:5.0e}  {:.5e}  {:.9e}  {:.9e}\n",
+                   Fnk.shortSymbol(), Fnk.rinf(), Fnk.eps(), R_rms, Fnk.en(),
+                   Fnk.en() * PhysConst::Hartree_eV / 1.0e3);
+      }
+    }
+  }
+}
+
+//==============================================================================
+nlohmann::json Wavefunction::output_to_json(const std::string &out_name) {
+
+  using namespace qip::overloads;
+  nlohmann::json js;
+
+  js["metadata"] = {
+      {"description",
+       "This JSON object contains atomic structure data including radial grid, "
+       "nuclear properties, and wavefunctions."},
+
+      {"radial",
+       {{"r", "Array of radial grid points [a.u.]"},
+        {"dr", "Step size between radial points [a.u.]"}}},
+
+      {"nucleus",
+       {{"Z", "Atomic number"},
+        {"A", "Mass number"},
+        {"r_rms", "RMS charge radius [fm]"},
+        {"mu", "Nuclear magnetic moment (from lookup table, based on A)"},
+        {"I", "Nuclear spin (based on A)"},
+        {"parity", "Nuclear parity (+1 or -1), based on A"},
+        {"L", "Orbital angular momentum, based on I and parity"}}},
+
+      {"wavefunctions",
+       {{"core", "Core wavefunctions"},
+        {"valence", "Valence electronic wavefunctions"},
+        {"muon", "Valence muonic wavefunctions"},
+        {"note",
+         "Each of 'core', 'valence', and 'muon' contains a 'list' of orbital "
+         "labels (e.g., '2s+'), and corresponding entries/orbtials keyed by "
+         "those labels. Each entry has the fields listed in 'orbital_fields'."},
+        {"example", "To get the 3p_1/2 core energy: "
+                    "json['wavefunctions']['core']['3p-']['en'] (use double "
+                    "quotes in real JSON)"},
+        {"orbital_fields",
+         {{"n", "Principal quantum number"},
+          {"kappa", "Dirac angular quantum number (κ)"},
+          {"2j", "Twice the total angular momentum (integer)"},
+          {"j", "Total angular momentum (j = 2j / 2)"},
+          {"l", "Orbital angular momentum"},
+          {"en", "Orbital energy [a.u.]"},
+          {"f", "Upper radial component values (array over r)"},
+          {"g", "Lower radial component values (array over r)"}}}}}};
+
+  js["radial"]["r"] = grid().r();
+  js["radial"]["dr"] = grid().drdu() * grid().du();
+
+  js["nucleus"]["Z"] = Znuc();
+  js["nucleus"]["A"] = Anuc();
+  js["nucleus"]["r_rms"] = get_rrms();
+  js["nucleus"]["mu"] = Nuclear::find_mu(Znuc(), Anuc());
+
+  const auto I_nuc = Nuclear::find_spin(Znuc(), Anuc());
+  const auto pi = Nuclear::find_parity(Znuc(), Anuc());
+  const auto l_tmp = int(I_nuc + 0.5 + 0.0001);
+  auto l = ((l_tmp % 2 == 0) == (pi == 1)) ? l_tmp : l_tmp - 1;
+  js["nucleus"]["I"] = I_nuc;
+  js["nucleus"]["parity"] = pi;
+  js["nucleus"]["L"] = l;
+
+  using namespace std::string_literals;
+
+  auto &js_wfs = js["wavefunctions"];
+
+  // Store list of orbital symbols, for ease of retrieval:
+  js_wfs["core"]["list"] = nlohmann::json::array();
+  js_wfs["valence"]["list"] = nlohmann::json::array();
+  js_wfs["muon"]["list"] = nlohmann::json::array();
+
+  for (const auto &list : {"core"s, "valence"s}) {
+    const auto &orbitals = list == "core" ? core() : valence();
+
+    for (const auto &v : orbitals) {
+
+      // append to the lists:
+      if (list == "core") {
+        js_wfs["core"]["list"].push_back(v.shortSymbol());
+      } else if (v.exotic()) {
+        js_wfs["muon"]["list"].push_back(v.shortSymbol());
+      } else {
+        js_wfs["valence"]["list"].push_back(v.shortSymbol());
+      }
+
+      auto &js_wf = list == "core" ? js_wfs["core"][v.shortSymbol()] :
+                    v.exotic()     ? js_wfs["muon"][v.shortSymbol()] :
+                                     js_wfs["valence"][v.shortSymbol()];
+
+      js_wf["n"] = v.n();
+      js_wf["kappa"] = v.kappa();
+      js_wf["2j"] = v.twoj();
+      js_wf["j"] = 0.5 * v.twoj();
+      js_wf["l"] = v.l();
+      js_wf["en"] = v.en();
+      js_wf["f"] = v.f();
+      js_wf["g"] = v.g();
+    }
+  }
+
+  if (!out_name.empty()) {
+    std::ofstream o(out_name);
+    o << std::setw(4) << js << std::endl;
+  }
+
+  return js;
 }

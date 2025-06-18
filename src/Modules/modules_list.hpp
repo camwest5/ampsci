@@ -11,18 +11,18 @@
 #include "Modules/ladder.hpp"
 #include "Modules/lifetimes.hpp"
 #include "Modules/matrixElements.hpp"
-#include "Modules/muonPV.hpp"
+#include "Modules/muonic.hpp"
 #include "Modules/pnc.hpp"
 #include "Modules/polarisability.hpp"
 #include "Modules/qed.hpp"
 #include "Modules/runModules.hpp"
 #include "Modules/screeningFactors.hpp"
 #include "Modules/thirdOrder.hpp"
-
 #include <iostream>
 #include <string>
 #include <tuple>
 #include <vector>
+
 class Wavefunction;
 namespace IO {
 class InputBlock;
@@ -51,7 +51,13 @@ static const std::vector<ModuleInfo> module_list{
      "Calculates matrix elements of any operator"},
     {"CI_matrixElements", &CI_matrixElements,
      "Calculates matrix elements of any operator for CI wavefunctions"},
-    {"thirdOrderME", &thirdOrderME, "Calculates Third-order matrix elements"},
+    {"structureRad", &structureRad,
+     "Calculates structure radiation + normalisation corrections using "
+     "perturbation theory"},
+    {"normalisation", &normalisation,
+     "Calculates normalisation correction via derivative of Sigma"},
+    {"thirdOrderME", &thirdOrderME,
+     "Calculates Third-order matrix elements. Obsolete?"},
     {"lifetimes", &lifetimes, "Calculate radiative lifetimes (E1, E2, M1)"},
     {"polarisability", &polarisability, "Calculates static polarisabilities"},
     {"dynamicPolarisability", &dynamicPolarisability,
@@ -60,12 +66,16 @@ static const std::vector<ModuleInfo> module_list{
      "Calculates transition polarisabilities"},
     {"structureRad", &structureRad,
      "Calculates Struct. Rad + Normalisation corrections to MEs"},
+    {"isotopeShift", &fieldShift,
+     "soft link to `fieldShift` for back compatability"},
     {"fieldShift", &fieldShift,
-     "Calculates field-shift constants (isotope shift)"},
+     "Calculates field shift constants (isotope shift) using TDHF and MBPT"},
     {"isotopeShift", &isotopeShift,
      "Calculates isotope shift with field and specific mass shift."},
-    {"massShift", &massShift,
-     "Calculates specific mass shift (isotope shift)"},
+    {"massShift", &massShift, "Calculates specific mass shift (isotope shift)"},
+    {"fieldShift_direct", &fieldShift_direct,
+     "Calculates field-shift constants (isotope shift) by direct calculation "
+     "(Hartree-Fock)"},
     {"QED", &QED, "QED corrections to energies/matrix elements"},
     {"Breit", &Breit, "Breit corrections to energies"},
     {"ladder", &ladder, "Calculates ladder diagrams and energy corrections"},
@@ -73,12 +83,16 @@ static const std::vector<ModuleInfo> module_list{
     {"continuum", &continuum, "Compute and use continuum wavefunctions"},
     {"HFAnomaly", &HFAnomaly,
      "Calculates Bohr-Weisskopf effect and hyperfine anomaly"},
+    {"b_plot", &b_plot,
+     "Calculates HFAnomaly b moments, as a function of r_rms"},
     {"screeningFactors", &screeningFactors,
      "Calculates Feynman electron screening factors"},
     {"pnc", &calculatePNC, "Calculates APV amplitudes"},
     {"muonPV", &muonPV, "For testing/playing with muonic PV"},
+    {"muon", &muon,
+     "Calculating muonic wavefunctions, energies, matrix elements - somewhat "
+     "obsolete after introduction of Exotic{} into ampsci main"},
     {"VQE", &VQE, "For testing/playing with VQE method"},
-
     {"exampleModule", &exampleModule, "A short description of the module"}};
 
 } // namespace Module

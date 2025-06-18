@@ -1,13 +1,13 @@
 #include "pnc.hpp"
-#include "DiracOperator/DiracOperator.hpp"
 #include "DiracOperator/TensorOperator.hpp"
+#include "DiracOperator/include.hpp"
 #include "ExternalField/MixedStates.hpp"
 #include "ExternalField/TDHF.hpp"
 #include "IO/InputBlock.hpp"
 #include "MBPT/CorrelationPotential.hpp"
 #include "Physics/AtomData.hpp"
 #include "Physics/NuclearData.hpp"
-#include "Physics/NuclearPotentials.hpp"
+#include "Potentials/NuclearPotentials.hpp"
 #include "Wavefunction/Wavefunction.hpp"
 #include <algorithm>
 #include <cmath>

@@ -266,17 +266,19 @@ generate_hfs(const IO::InputBlock &input, const Wavefunction &wf) {
        {"rrms",
         "nuclear (magnetic) rms radius, in Fermi (fm) (defult is charge rms)"},
        {"units", "Units for output (only for k=1,k=2). MHz or au [MHz]"},
-       {"nuc_mag", "Nuclear magnetisation: ball, point, shell, SingleParticle, "
-                   "or doublyOddSP [ball]"},
-       {"printF", "Writes F(r) [nuc_mag] to a text file [false]"},
-       {"print", "Write F(r) [nuc_mag] info to screen [true]"},
-       {"", "The following are only for SingleParticle or doublyOddSP"},
+       {"F", "F(r): Nuclear moment distribution: ball, point, shell, "
+             "SingleParticle, or doublyOddSP [ball]"},
+       {"F(r)", "Obselete; use 'F' from now - will be removed"},
+       {"nuc_mag", "Obselete; use 'F' from now - will be removed"},
+       {"printF", "Writes F(r) to a text file [false]"},
+       {"print", "Write F(r) info to screen [true]"},
+       {"", "The following are only for F=SingleParticle or doublyOddSP"},
        {"I", "Nuclear spin. Taken from nucleus"},
        {"parity", "Nulcear parity: +/-1"},
        {"l", "l for unpaired nucleon (automatically derived from I and "
              "parity; best to leave as default)"},
        {"gl", "=1 for proton, =0 for neutron"},
-       {"", "The following are only for doublyOddSP"},
+       {"", "The following are only used if F=doublyOddSP"},
        {"mu1", "mag moment of 'first' unpaired nucleon"},
        {"gl1", "gl of 'first' unpaired nucleon"},
        {"l1", "l of 'first' unpaired nucleon"},
@@ -311,7 +313,9 @@ generate_hfs(const IO::InputBlock &input, const Wavefunction &wf) {
               << "! meaningless results\n";
   }
 
-  const auto g_or_Q = (k == 1) ? (mu / I_nuc) : input.get("Q", 1.0);
+  const auto g_or_Q = (k == 1) ? (mu / I_nuc) :
+                      (k == 2) ? input.get("Q", isotope.q ? *isotope.q : 1.0) :
+                                 input.get("Q", 1.0);
 
   enum class DistroType {
     point,
@@ -327,6 +331,8 @@ generate_hfs(const IO::InputBlock &input, const Wavefunction &wf) {
 
   // For compatability with old notation of 'F(r)' input option
   const auto Fr_str =
+      input.has_option("F") ?
+          input.get<std::string>("F", default_distribution) :
       input.has_option("nuc_mag") ?
           input.get<std::string>("nuc_mag", default_distribution) :
           input.get<std::string>("F(r)", default_distribution);
@@ -334,12 +340,12 @@ generate_hfs(const IO::InputBlock &input, const Wavefunction &wf) {
   const auto distro_type =
       (qip::ci_wc_compare(Fr_str, "point*") || qip::ci_compare(Fr_str, "1")) ?
           DistroType::point :
-      qip::ci_compare(Fr_str, "ball")       ? DistroType::ball :
-      qip::ci_compare(Fr_str, "shell")      ? DistroType::shell :
-      qip::ci_wc_compare(Fr_str, "Single*") ? DistroType::SingleParticle :
-      qip::ci_compare(Fr_str, "doublyOdd*") ? DistroType::doublyOddSP :
-      qip::ci_compare(Fr_str, "spu")        ? DistroType::spu :
-                                              DistroType::Error;
+      qip::ci_compare(Fr_str, "ball")          ? DistroType::ball :
+      qip::ci_compare(Fr_str, "shell")         ? DistroType::shell :
+      qip::ci_wc_compare(Fr_str, "Single*")    ? DistroType::SingleParticle :
+      qip::ci_wc_compare(Fr_str, "doublyOdd*") ? DistroType::doublyOddSP :
+      qip::ci_compare(Fr_str, "spu")           ? DistroType::spu :
+                                                 DistroType::Error;
   if (distro_type == DistroType::Error) {
     fmt2::styled_print(fg(fmt::color::red), "\nError 271:\n");
     std::cout << "\nIn hyperfine. Unkown F(r) - " << Fr_str << "\n";
