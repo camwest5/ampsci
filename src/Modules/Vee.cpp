@@ -21,8 +21,8 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
                {"min_mu", "Minimum mediator mass to consider [1e-6]"},
                {"max_mu", "Maximum mediator mass to consider [20]"},
                {"N_mu", "Number of masses to consider [100]"},
-               {"n", "Principal quantum number for Dv [ground]"},
-               {"kappa", "Kappa for Dv [ground]"},
+               {"n", "Principal quantum number for state [ground]"},
+               {"kappa", "Kappa for state [ground]"},
                {"A2", "Second isotope's mass (for 'ss' or 'vv') [A+5]"},
                {"g0", "Include the gamma-0 term on both electrons? [true]"},
                {"test", "Run module testing [false]"}});
