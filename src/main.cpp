@@ -263,9 +263,9 @@ int main(int argc, char *argv[]) {
   }
 
   // nb: std::filesystem not available in g++-7 (getafix version)
-  const auto fstream = std::fstream(default_input);
+  const auto fstream = std::fstream(in_text_1);
   const auto input = fstream.good() ?
-                         IO::InputBlock("ampsci", default_input, fstream) :
+                         IO::InputBlock("ampsci", in_text_1, fstream) :
                          IO::InputBlock("ampsci", default_input);
 
   // Run program. Add option to run multiple times
