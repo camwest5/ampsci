@@ -120,8 +120,9 @@ Wavefunction::determineCore(const std::string &str_core_in)
 
 //==============================================================================
 void Wavefunction::set_HF(const std::string &method, const double x_Breit,
-                          const bool mass_shift, const std::string &in_core,
-                          double eps_HF, bool print) {
+                          const bool mass_shift, const bool Vee,
+                          const std::string &in_core, double eps_HF,
+                          bool print) {
 
   auto core = determineCore(in_core);
   const auto qed = std::nullopt; // we add QED (optionally) later - to allow for
@@ -169,7 +170,7 @@ void Wavefunction::solve_core(bool print) {
 void Wavefunction::solve_core(const std::string &method, const double x_Breit,
                               const std::string &in_core, double eps_HF,
                               bool print) {
-  set_HF(method, x_Breit, false, in_core, eps_HF, print);
+  set_HF(method, x_Breit, false, false, in_core, eps_HF, print);
   solve_core(print);
 }
 

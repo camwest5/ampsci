@@ -237,8 +237,8 @@ public:
   //! equations)
   void set_HF(const std::string &method = "HartreeFock",
               const double x_Breit = 0.0, const bool mass_shift = false,
-              const std::string &in_core = "", double eps_HF = 1.0e-13,
-              bool print = true);
+              const bool Vee = false, const std::string &in_core = "",
+              double eps_HF = 1.0e-13, bool print = true);
 
   //! Performs hartree-Fock procedure for core
   void solve_core(bool print = true);

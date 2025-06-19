@@ -59,7 +59,7 @@ HartreeFock::HartreeFock(std::shared_ptr<const Grid> grid,
                          std::vector<DiracSpinor> core,
                          std::optional<QED::RadPot> vrad, double alpha,
                          int Anuc, Method method, double x_Breit,
-                         bool mass_shift, double in_eps,
+                         bool mass_shift, bool Vee, double in_eps,
                          Parametric::Type potential, double H_g, double d_t)
     : m_rgrid(grid),
       m_core(std::move(core)),
@@ -73,6 +73,7 @@ HartreeFock::HartreeFock(std::shared_ptr<const Grid> grid,
       m_vdir(m_rgrid->num_points(), 0.0),
       m_Yab(),
       m_mass_shift(mass_shift),
+      m_Vee(Vee),
       m_Anuc(Anuc) {
   set_parametric_potential(true, potential, H_g, d_t);
 }
@@ -365,6 +366,7 @@ EpsIts HartreeFock::hf_approx_core(const double eps_target_HF) {
 
 //==============================================================================
 EpsIts HartreeFock::hartree_fock_core() {
+
   using namespace qip::overloads;
   if (m_core.empty()) {
     return {};
@@ -463,6 +465,12 @@ EpsIts HartreeFock::hartree_fock_core() {
         const auto VsmsFa = Vsms(Fa, core_prev);
         v_nonlocal += VsmsFa;
         en += (Fzero * VsmsFa) / (Fa * Fzero);
+      }
+
+      if (m_Vee) {
+        const auto VeeFa = Vee(Fa, core_prev);
+        v_nonlocal += VeeFa;
+        en += (Fzero * VeeFa) / (Fa * Fzero);
       }
 
       // Solve HF Dirac equation for core state
@@ -583,6 +591,9 @@ EpsIts HartreeFock::hf_valence(DiracSpinor &Fa,
     }
     if (m_mass_shift) {
       VxFa += Vsms(Fa, m_core);
+    }
+    if (m_Vee) {
+      VxFa += Vee(Fa, m_core);
     }
     if (Sigma) {
       const auto f = prev_its && it < 15 ? it / 15.0 : 1.0;
@@ -758,6 +769,21 @@ HartreeFock::Vsms(const DiracSpinor &Fa,
   } else {
     return Fa * 0.0;
   }
+}
+
+//==============================================================================
+DiracSpinor
+HartreeFock::Vee(const DiracSpinor &Fa,
+                 const std::vector<DiracSpinor> &current_core) const {
+
+  /*
+  // γ0γ5Fa
+  DiracSpinor g0g5Fa(Fa);
+  g0g5Fa.f() = Fa.g();
+  g0g5Fa.g() = -1.0 * Fa.f();
+
+  return Fa * 0.0;
+  */
 }
 
 //==============================================================================
@@ -1200,6 +1226,8 @@ void HartreeFock::hf_orbital_green(
         VnlF_tilde += tVBr->VbrFa(dFa, static_core);
       if (Sigma)
         VnlF_tilde += (*Sigma)(dFa);
+      if (m_mass_shift)
+        VnlF_tilde += Vsms(dFa, static_core);
       if (!dv0.empty())
         VnlF_tilde += dv0 * dFa;
       // const auto SigmaF_tilde = Sigma(dFa);
