@@ -9,7 +9,7 @@
 #include "IO/InputBlock.hpp"
 #include "Physics/PhysConst_constants.hpp"
 #include "Wavefunction/Wavefunction.hpp"
-#include "ampsci.hpp"
+#include "ampsci/ampsci.hpp"
 #include <cmath>
 
 #include "fmt/ostream.hpp"
