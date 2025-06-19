@@ -6,7 +6,7 @@
 #include "Maths/SphericalBessel.hpp"
 #include "Physics/PhysConst_constants.hpp" // For GHz unit conversion
 #include "Wavefunction/Wavefunction.hpp"
-#include "ampsci.hpp"
+#include "ampsci/ampsci.hpp"
 #include <cmath>
 #include <gsl/gsl_sf.h>
 
