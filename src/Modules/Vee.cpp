@@ -1,6 +1,8 @@
 #include "Modules/Vee.hpp"
 #include "Angular/Wigner369j.hpp"
 #include "DiracOperator/Operators/Ek.hpp"
+#include "DiracOperator/Operators/V_SP.hpp"
+#include "ExternalField/TDHF.hpp"
 #include "IO/InputBlock.hpp"
 #include "Maths/NumCalc_quadIntegrate.hpp"
 #include "Maths/SphericalBessel.hpp"
@@ -31,6 +33,13 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   if (input.has_option("help")) {
     return;
   }
+
+  const bool test = input.get<bool>("test", false);
+  if (test) {
+    sp_tdhf(input, wf);
+    return;
+  }
+
   const auto e_handler = gsl_set_error_handler_off();
 
   const std::string int_type = input.get<std::string>("type", "sp");
@@ -46,6 +55,37 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
                  "(vector-vector)\n is provided.";
   }
   gsl_set_error_handler(e_handler);
+}
+
+void sp_tdhf(const IO::InputBlock &input, const Wavefunction &wf) {
+  std::cout << "In test mode";
+
+  DiracOperator::V_SP V_sp(wf.core());
+  ExternalField::TDHF tdhf_Vsp(&V_sp, wf.vHF());
+  tdhf_Vsp.solve_core(0);
+
+  DiracOperator::E1 E1(wf.grid());
+  ExternalField::TDHF tdhf_d(&E1, wf.vHF());
+  tdhf_d.solve_core(0);
+
+  const auto Fv = wf.valence()[0];
+  const double mu = 1.0;
+
+  double Dv = 0.0;
+
+  for (auto Fn : wf.basis()) {
+    if (Fn.kappa() == -Fv.kappa()) {
+      // <v|d|n>
+      const auto d_vn = E1.rme3js(Fv.twoj(), Fn.twoj()) *
+                        (E1.reducedME(Fv, Fn) + tdhf_d.dV(Fv, Fn));
+
+      // <n|V|v>
+      const auto Vsps = V_sp.rme3js(Fn.twoj(), Fv.twoj()) *
+                        (V_sp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
+
+      Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
+    }
+  }
 }
 
 void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,

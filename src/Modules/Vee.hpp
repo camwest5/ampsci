@@ -4,6 +4,7 @@
 
 namespace Module {
 void Vee(const IO::InputBlock &input, const Wavefunction &wf);
+void sp_tdhf(const IO::InputBlock &input, const Wavefunction &wf);
 void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
                       const Wavefunction &wf);
 double dE(const double mu, const std::string int_type,

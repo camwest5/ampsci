@@ -2,6 +2,7 @@
 #include "Modules/Breit.hpp"
 #include "Modules/HFAnomaly.hpp"
 #include "Modules/VQE.hpp"
+#include "Modules/Vee.hpp"
 #include "Modules/basic.hpp"
 #include "Modules/exampleModule.hpp"
 #include "Modules/isotopeShift.hpp"
