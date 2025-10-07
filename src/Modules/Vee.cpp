@@ -64,11 +64,11 @@ double Dv_tdhf(const double mu, const Wavefunction &wf) {
 
   DiracOperator::V_SP V_sp(wf.core(), mu);
   ExternalField::TDHF tdhf_Vsp(&V_sp, wf.vHF());
-  tdhf_Vsp.solve_core(0, 100, false);
+  tdhf_Vsp.solve_core(0);
 
   DiracOperator::E1 E1(wf.grid());
   ExternalField::TDHF tdhf_d(&E1, wf.vHF());
-  tdhf_d.solve_core(0, 100, false);
+  tdhf_d.solve_core(0);
 
   const auto Fv = wf.valence()[0];
 
@@ -77,22 +77,24 @@ double Dv_tdhf(const double mu, const Wavefunction &wf) {
   for (auto Fn : wf.basis()) {
     if (Fn.kappa() == -Fv.kappa()) {
       // <v|d|n>
-      // const auto d_vn = E1.rme3js(Fv.twoj(), Fn.twoj()) *
-      //                   (E1.reducedME(Fv, Fn) + tdhf_d.dV(Fv, Fn));
+      const auto d_vn = E1.rme3js(Fv.twoj(), Fn.twoj()) *
+                        (E1.reducedME(Fv, Fn) + tdhf_d.dV(Fv, Fn));
 
-      const auto d_vn = d_ab(wf.grid(), Fv, Fn);
+      // const auto d_vn = d_ab(wf.grid(), Fv, Fn);
 
       // <n|V|v>
-      // const auto Vsps = V_sp.rme3js(Fn.twoj(), Fv.twoj()) *
-      //                   (V_sp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
 
       // const auto Vsps = Fn * Vee::V_SP_Fv(wf.core(), Fv, Fn.kappa(), 1.0, mu);
 
-      // Using old calculation:
+      // Using old implementation:
       // const auto Vsps = V_nv(false, wf.core(), Fv, Fn, 1, mu);
 
-      // Using new calculation:
-      const auto Vsps = V_sp.fullME(Fn, Fv);
+      // Using new implementation:
+      // const auto Vsps = V_sp.fullME(Fn, Fv);
+
+      // Using TDHF
+      const auto Vsps = V_sp.rme3js(Fn.twoj(), Fv.twoj()) *
+                        (V_sp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
 
       Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
     }
@@ -267,79 +269,77 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 
   // Compare contact approximation with large μ
 
-  if (test) {
-    std::cout << "\n\n***Troubleshooting\n\n";
+  // if (test) {
+  //   std::cout << "\n\n***Troubleshooting\n\n";
 
-    // Check the Bs - appears to be working well!
-    // Should have that Rk_abcd = Fa*beta*Fc = Fb*B*Fd
+  //   // Check the Bs - appears to be working well!
+  //   // Should have that Rk_abcd = Fa*beta*Fc = Fb*B*Fd
 
-    // Also check the full MEs
+  //   // Also check the full MEs
 
-    // for (auto Fn : wf.basis())
-    //   for (auto Fa : wf.core()) {
-    //     {
-    //       const auto test_R = Rk_abcd(1, 1, Fn, Fa, Fa, Fv);
-    //       const auto test_V = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0001);
-    //       if (test_R != 0) {
-    //         // std::cout << "\n"
-    //         //           << test_R << " = " << Fn * Vee::bk_bd_v(1, 1, Fa, Fv, Fa)
-    //         //           << " = " << Fa * Vee::Bk_ac_v(1, 1, Fn, Fa, Fv) << "?";
-    //       }
+  //   // for (auto Fn : wf.basis())
+  //   //   for (auto Fa : wf.core()) {
+  //   //     {
+  //   //       const auto test_R = Rk_abcd(1, 1, Fn, Fa, Fa, Fv);
+  //   //       const auto test_V = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0001);
+  //   //       if (test_R != 0) {
+  //   //         // std::cout << "\n"
+  //   //         //           << test_R << " = " << Fn * Vee::bk_bd_v(1, 1, Fa, Fv, Fa)
+  //   //         //           << " = " << Fa * Vee::Bk_ac_v(1, 1, Fn, Fa, Fv) << "?";
+  //   //       }
 
-    //       if (test_V != 0) {
-    //         std::cout << "\n"
-    //                   << test_V << " = "
-    //                   << Fn * Vee::V_SP_Fv(wf.core(), Fv, Fn.kappa(), 1.0,
-    //                                        0.0001)
-    //                   << "?";
-    //       }
-    //     }
-    //   }
+  //   //       if (test_V != 0) {
+  //   //         std::cout << "\n"
+  //   //                   << test_V << " = "
+  //   //                   << Fn * Vee::V_SP_Fv(wf.core(), Fv, Fn.kappa(), 1.0,
+  //   //                                        0.0001)
+  //   //                   << "?";
+  //   //       }
+  //   //     }
+  //   //   }
 
-  } else {
-    const auto test_max_mu = 1000.0;
-    const auto test_min_mu = 1e-6;
+  const auto test_max_mu = 1000.0;
+  const auto test_min_mu = 1e-6;
 
-    // Test ground with all core states
-    std::cout
-        << "\nTesting V_nv in limits for all basis states |n> with valence "
-        << Fv.symbol()
-        << ".\nShowing >10% discrepancies.\n\nFor the exact "
-           "cases,\nμ->0 = "
-        << test_min_mu << "\nμ->∞ = " << test_max_mu;
+  // Test ground with all core states
+  std::cout << "\nTesting V_nv in limits for all basis states |n> with valence "
+            << Fv.symbol()
+            << ".\nShowing >10% discrepancies.\n\nFor the exact "
+               "cases,\nμ->0 = "
+            << test_min_mu << "\nμ->∞ = " << test_max_mu;
 
-    std::cout << "\n\nCheck OK:\n|v>  κv   |n>  κn     massless exact (μ->0) "
-                 " rel diff exact "
-                 "(μ->∞)      contact  rel diff\n";
+  std::cout << "\n\nCheck OK:\n|v>  κv   |n>  κn     massless exact (μ->0) "
+               " rel diff exact "
+               "(μ->∞)      contact  rel diff\n";
 
-    for (auto Fn : wf.basis()) {
-      if (Fn.twoj() == Fv.twoj()) {
-        const auto V_massless = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0);
-        const auto V_exact_min =
-            V_nv(false, wf.core(), Fv, Fn, 1.0, test_min_mu);
-        const auto V_exact_max =
-            V_nv(false, wf.core(), Fv, Fn, 1.0, test_max_mu);
-        const auto V_contact = V_nv(true, wf.core(), Fv, Fn, 1.0, test_max_mu);
+  for (auto Fn : wf.basis()) {
+    if (Fn.twoj() == Fv.twoj()) {
+      const auto V_massless = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0);
+      const auto V_exact_min = V_nv(false, wf.core(), Fv, Fn, 1.0, test_min_mu);
+      const auto V_exact_max = V_nv(false, wf.core(), Fv, Fn, 1.0, test_max_mu);
+      const auto V_contact = V_nv(true, wf.core(), Fv, Fn, 1.0, test_max_mu);
 
-        const auto diff_massless =
-            std::abs((V_massless - V_exact_min) / V_massless);
-        const auto diff_contact =
-            std::abs((V_contact - V_exact_max) / V_contact);
+      const auto diff_massless =
+          std::abs((V_massless - V_exact_min) / V_massless);
+      const auto diff_contact = std::abs((V_contact - V_exact_max) / V_contact);
 
-        if ((diff_massless > 0.1) || (diff_contact > 0.1)) {
-          fmt::print("{:3s} {:3}  {:4s} {:3} {:12.3e} {:12.3e} {:9.3f} "
-                     "{:12.3e} {:12.3e} {:9.3f}\n",
-                     Fv.shortSymbol(), Fv.kappa(), Fn.shortSymbol(), Fn.kappa(),
-                     V_massless, V_exact_min, diff_massless, V_exact_max,
-                     V_contact, diff_contact);
-        }
+      if ((diff_massless > 0.1) || (diff_contact > 0.1)) {
+        fmt::print("{:3s} {:3}  {:4s} {:3} {:12.3e} {:12.3e} {:9.3f} "
+                   "{:12.3e} {:12.3e} {:9.3f}\n",
+                   Fv.shortSymbol(), Fv.kappa(), Fn.shortSymbol(), Fn.kappa(),
+                   V_massless, V_exact_min, diff_massless, V_exact_max,
+                   V_contact, diff_contact);
       }
     }
   }
 
-  std::cout << "\nAtomic EDM for " << Fv.symbol()
-            << " with S-PS interaction (mediator mass = μ).\n   μ (m_e) "
-               "         Dv     Dv_tdhf     i0_max     k0_max\n";
+  std::vector<double> Dv_TDHFs;
+  std::vector<double> Dvs;
+  std::vector<double> i0_maxs;
+  std::vector<double> k0_maxs;
+  std::vector<double> mus;
+
+  std::cout << "\nRunning TDHF for Vee_SP.\n";
 
   // Currently looks at one valence state - ground
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
@@ -348,10 +348,9 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
     double Dv_TDHF = 0;
     double Dv = 0;
     const auto mu = std::exp(log_mu);
+    std::cout << "\nμ = " << mu << "\n";
 
-    if (test) {
-      Dv_TDHF = Dv_tdhf(mu, wf);
-    }
+    Dv_TDHF = Dv_tdhf(mu, wf);
 
     for (auto Fn : wf.basis()) {
       if ((Fn.twoj() == Fv.twoj()) && (Fn != Fv)) {
@@ -372,8 +371,20 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
     const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
 
-    fmt::print("{:10.4e} {:11.4e} {:11.4e} {:10.1e} {:10.1e}\n", mu, Dv,
-               Dv_TDHF, i0_max, k0_max);
+    Dvs.push_back(Dv);
+    Dv_TDHFs.push_back(Dv_TDHF);
+    i0_maxs.push_back(i0_max);
+    k0_maxs.push_back(k0_max);
+    mus.push_back(mu);
+  }
+
+  std::cout << "\nAtomic EDM for " << Fv.symbol()
+            << " with S-PS interaction (mediator mass = μ).\n   μ (m_e) "
+               "         Dv     Dv_tdhf     i0_max     k0_max\n";
+
+  for (int i = 0; i < mus.size(); ++i) {
+    fmt::print("{:10.4e} {:11.4e} {:11.4e} {:10.1e} {:10.1e}\n", mus[i], Dvs[i],
+               Dv_TDHFs[i], i0_maxs[i], k0_maxs[i]);
   }
 }
 
