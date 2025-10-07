@@ -20,6 +20,7 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
                     "interaction."},
                {"type", "'sp' (scalar-pseudoscalar), 'ss' (scalar-scalar), "
                         "'vv' (vector-vector) ['sp']"},
+               {"tdhf", "Include TDHF calcs for 'sp'? [false]"},
                {"contact", "Consider μ->infty, i.e. a contact force [false]"},
                {"min_mu", "Minimum mediator mass to consider [1e-6]"},
                {"max_mu", "Maximum mediator mass to consider [20]"},
@@ -234,6 +235,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   const double max_mu = input.get<double>("max_mu", 1.0e4);
   const double N_mu = input.get<double>("N_mu", 100.0);
   const bool g0_both = input.get<bool>("g0", true);
+  const bool tdhf = input.get<bool>("tdhf", false);
 
   const bool test = input.get<bool>("test", false);
 
@@ -339,18 +341,21 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   std::vector<double> k0_maxs;
   std::vector<double> mus;
 
-  std::cout << "\nRunning TDHF for Vee_SP.\n";
+  if (tdhf) {
+    std::cout << "\nRunning TDHF for Vee_SP.\n";
+
+  } else {
+    std::cout << "\nAtomic EDM for " << Fv.symbol()
+              << " with S-PS interaction (mediator mass = μ).\n   μ (m_e) "
+                 "         Dv     i0_max     k0_max\n";
+  }
 
   // Currently looks at one valence state - ground
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
        log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
-    double Dv_TDHF = 0;
-    double Dv = 0;
     const auto mu = std::exp(log_mu);
-    std::cout << "\nμ = " << mu << "\n";
-
-    Dv_TDHF = Dv_tdhf(mu, wf);
+    double Dv = 0;
 
     for (auto Fn : wf.basis()) {
       if ((Fn.twoj() == Fv.twoj()) && (Fn != Fv)) {
@@ -366,25 +371,35 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 
     // Multiply by hbar c
     Dv *= 1.0 / PhysConst::alpha;
-    Dv_TDHF *= 1.0 / PhysConst::alpha;
 
     const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
 
-    Dvs.push_back(Dv);
-    Dv_TDHFs.push_back(Dv_TDHF);
-    i0_maxs.push_back(i0_max);
-    k0_maxs.push_back(k0_max);
-    mus.push_back(mu);
+    if (tdhf) {
+      std::cout << "\nμ = " << mu << "\n";
+      double Dv_TDHF = 0;
+      Dv_TDHF = Dv_tdhf(mu, wf);
+      Dv_TDHF *= 1.0 / PhysConst::alpha;
+
+      Dv_TDHFs.push_back(Dv_TDHF);
+      Dvs.push_back(Dv);
+      i0_maxs.push_back(i0_max);
+      k0_maxs.push_back(k0_max);
+      mus.push_back(mu);
+    } else {
+      fmt::print("{:10.4e} {:11.4e} {:10.1e} {:10.1e}\n", mu, Dv, i0_max,
+                 k0_max);
+    }
   }
 
-  std::cout << "\nAtomic EDM for " << Fv.symbol()
-            << " with S-PS interaction (mediator mass = μ).\n   μ (m_e) "
-               "         Dv     Dv_tdhf     i0_max     k0_max\n";
-
-  for (int i = 0; i < mus.size(); ++i) {
-    fmt::print("{:10.4e} {:11.4e} {:11.4e} {:10.1e} {:10.1e}\n", mus[i], Dvs[i],
-               Dv_TDHFs[i], i0_maxs[i], k0_maxs[i]);
+  if (tdhf) {
+    std::cout << "\nAtomic EDM for " << Fv.symbol()
+              << " with S-PS interaction (mediator mass = μ).\n   μ (m_e) "
+                 "         Dv     Dv_tdhf     i0_max     k0_max\n";
+    for (int i = 0; i < mus.size(); ++i) {
+      fmt::print("{:10.4e} {:11.4e} {:11.4e} {:10.1e} {:10.1e}\n", mus[i],
+                 Dvs[i], Dv_TDHFs[i], i0_maxs[i], k0_maxs[i]);
+    }
   }
 }
 
