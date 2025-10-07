@@ -28,10 +28,6 @@ double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
                         const DiracSpinor &Fd);
 std::vector<double> Bk_ab(const double k, const double mu,
                           const DiracSpinor &Fa, const DiracSpinor &Fb);
-double mod_sph_bessel_i(double n, double x);
-double mod_sph_bessel_k(double n, double x);
 
-DiracSpinor g0(const DiracSpinor &Fa);
-DiracSpinor i_g0_g5(const DiracSpinor &Fa);
 void sps_testing(const Wavefunction &wf, const bool contact);
 } // namespace Module

@@ -60,49 +60,6 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   gsl_set_error_handler(e_handler);
 }
 
-double Dv_tdhf(const double mu, const Wavefunction &wf) {
-  // std::cout << "In test mode";
-
-  DiracOperator::V_SP V_sp(wf.core(), mu);
-  ExternalField::TDHF tdhf_Vsp(&V_sp, wf.vHF());
-  tdhf_Vsp.solve_core(0);
-
-  DiracOperator::E1 E1(wf.grid());
-  ExternalField::TDHF tdhf_d(&E1, wf.vHF());
-  tdhf_d.solve_core(0);
-
-  const auto Fv = wf.valence()[0];
-
-  double Dv = 0.0;
-
-  for (auto Fn : wf.basis()) {
-    if (Fn.kappa() == -Fv.kappa()) {
-      // <v|d|n>
-      const auto d_vn = E1.rme3js(Fv.twoj(), Fn.twoj()) *
-                        (E1.reducedME(Fv, Fn) + tdhf_d.dV(Fv, Fn));
-
-      // const auto d_vn = d_ab(wf.grid(), Fv, Fn);
-
-      // <n|V|v>
-
-      // const auto Vsps = Fn * Vee::V_SP_Fv(wf.core(), Fv, Fn.kappa(), 1.0, mu);
-
-      // Using old implementation:
-      // const auto Vsps = V_nv(false, wf.core(), Fv, Fn, 1, mu);
-
-      // Using new implementation:
-      // const auto Vsps = V_sp.fullME(Fn, Fv);
-
-      // Using TDHF
-      const auto Vsps = V_sp.rme3js(Fn.twoj(), Fv.twoj()) *
-                        (V_sp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
-
-      Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
-    }
-  }
-  return Dv;
-}
-
 void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
                       const Wavefunction &wf) {
 
@@ -372,8 +329,8 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
     // Multiply by hbar c
     Dv *= 1.0 / PhysConst::alpha;
 
-    const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
-    const auto k0_max = mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
+    const auto i0_max = Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
+    const auto k0_max = Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
 
     if (tdhf) {
       std::cout << "\nμ = " << mu << "\n";
@@ -401,6 +358,49 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
                  Dvs[i], Dv_TDHFs[i], i0_maxs[i], k0_maxs[i]);
     }
   }
+}
+
+double Dv_tdhf(const double mu, const Wavefunction &wf) {
+  // std::cout << "In test mode";
+
+  DiracOperator::V_SP V_sp(wf.core(), mu);
+  ExternalField::TDHF tdhf_Vsp(&V_sp, wf.vHF());
+  tdhf_Vsp.solve_core(0);
+
+  DiracOperator::E1 E1(wf.grid());
+  ExternalField::TDHF tdhf_d(&E1, wf.vHF());
+  tdhf_d.solve_core(0);
+
+  const auto Fv = wf.valence()[0];
+
+  double Dv = 0.0;
+
+  for (auto Fn : wf.basis()) {
+    if (Fn.kappa() == -Fv.kappa()) {
+      // <v|d|n>
+      const auto d_vn = E1.rme3js(Fv.twoj(), Fn.twoj()) *
+                        (E1.reducedME(Fv, Fn) + tdhf_d.dV(Fv, Fn));
+
+      // const auto d_vn = d_ab(wf.grid(), Fv, Fn);
+
+      // <n|V|v>
+
+      // const auto Vsps = Fn * Vee::V_SP_Fv(wf.core(), Fv, Fn.kappa(), 1.0, mu);
+
+      // Using old implementation:
+      // const auto Vsps = V_nv(false, wf.core(), Fv, Fn, 1, mu);
+
+      // Using new implementation:
+      // const auto Vsps = V_sp.fullME(Fn, Fv);
+
+      // Using TDHF
+      const auto Vsps = V_sp.rme3js(Fn.twoj(), Fv.twoj()) *
+                        (V_sp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
+
+      Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
+    }
+  }
+  return Dv;
 }
 
 double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb) {
@@ -489,10 +489,10 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
   //const auto i0 = std::max(Fa.min_pt(), Fc.min_pt());
   //const auto imax = std::min(Fa.max_pt(), Fc.max_pt());
 
-  const auto g_Fc = int_type == "vv" ? Fc : g0_both ? g0(Fc) : Fc;
+  const auto g_Fc = int_type == "vv" ? Fc : g0_both ? Vee::g0(Fc) : Fc;
 
-  const auto g_Fd = int_type == "sp" ? i_g0_g5(Fd) :
-                    int_type == "ss" ? g0(Fd) :
+  const auto g_Fd = int_type == "sp" ? Vee::i_g0_g5(Fd) :
+                    int_type == "ss" ? Vee::g0(Fd) :
                                        Fd;
 
   const auto screening_function = Bk_ab(k, mu, Fb, g_Fd);
@@ -514,8 +514,8 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 
   const auto &gr = Fa.grid();
   const auto &r = gr.r();
-  const auto g0_Fc = g0(Fc);
-  const auto ig0g5_Fd = i_g0_g5(Fd);
+  const auto g0_Fc = Vee::g0(Fc);
+  const auto ig0g5_Fd = Vee::i_g0_g5(Fd);
 
   // Delta case
 
@@ -562,8 +562,8 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 
   for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
     const auto x = mu * r[i_gr];
-    //i_k[i_gr] = mod_sph_bessel_i(k, x);
-    //k_k[i_gr] = mod_sph_bessel_k(k, x);
+    //i_k[i_gr] = Vee::mod_sph_bessel_i(k, x);
+    //k_k[i_gr] = Vee::mod_sph_bessel_k(k, x);
 
     i_k[i_gr] = std::exp(x) / (2 * x);
     k_k[i_gr] = std::exp(-x) / x;
@@ -615,9 +615,9 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
                         const DiracSpinor &Fb, const DiracSpinor &Fc,
                         const DiracSpinor &Fd) {
-  const auto screening_function = Coulomb::yk_ab(k, Fb, i_g0_g5(Fd));
+  const auto screening_function = Coulomb::yk_ab(k, Fb, Vee::i_g0_g5(Fd));
 
-  const auto g0_Fc = g0(Fc);
+  const auto g0_Fc = Vee::g0(Fc);
 
   const auto Rff =
       NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), g0_Fc.f(),
@@ -643,8 +643,8 @@ std::vector<double> Bk_ab(const double k, const double mu,
 
   for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
     const auto x = mu * r[i_gr];
-    i_k[i_gr] = mod_sph_bessel_i(k, x);
-    k_k[i_gr] = mod_sph_bessel_k(k, x);
+    i_k[i_gr] = Vee::mod_sph_bessel_i(k, x);
+    k_k[i_gr] = Vee::mod_sph_bessel_k(k, x);
 
     //i_k[i_gr] = std::exp(x) / (2 * x);
     //k_k[i_gr] = std::exp(-x) / x;
@@ -682,62 +682,6 @@ std::vector<double> Bk_ab(const double k, const double mu,
   }
 
   return result;
-}
-
-DiracSpinor g0(const DiracSpinor &Fa) {
-  DiracSpinor Fb(Fa);
-  Fb.g() = (-1.0 * Fa).g();
-  return Fb;
-}
-
-DiracSpinor i_g0_g5(const DiracSpinor &Fa) {
-  // Fb = i*γ5*Fa
-
-  DiracSpinor Fb(Fa);
-  Fb.f() = (-1.0 * Fa).g();
-  Fb.g() = (-1.0 * Fa).f();
-  return Fb;
-}
-
-double mod_sph_bessel_i(double n, double x) {
-  gsl_sf_result i_k;
-  const int gsl_status = gsl_sf_bessel_Inu_e(n + 0.5, x, &i_k);
-
-  if (gsl_status == GSL_SUCCESS) {
-    /*if (i_k.err / i_k.val > 0.01) {
-      std::cout << "\nWARNING: error in i_k greater than 1\%\ni_k = " << i_k.val
-                << " \u00b1 " << i_k.err << "\n";
-    }*/
-    return std::sqrt(M_PI / (2.0 * x)) * i_k.val;
-  } else if (gsl_status == GSL_EOVRFLW) {
-    return 0.0;
-  }
-  std::cout << "Need GSL_SUCCESS = " << GSL_SUCCESS
-            << " or GSL_EOVRFLW = " << GSL_EOVRFLW;
-  std::cout << "\n\ngsl_status = " << gsl_status << "\n";
-
-  throw std::bad_function_call();
-}
-
-double mod_sph_bessel_k(double n, double x) {
-  gsl_sf_result k_k;
-  const int gsl_status = gsl_sf_bessel_Knu_e(n + 0.5, x, &k_k);
-
-  if (gsl_status == GSL_SUCCESS) {
-    /*
-    if (k_k.err / k_k.val > 0.01) {
-      std::cout << "\nWARNING: error in i_k greater than 1\%\n " << k_k.val
-                << " \u00b1 " << k_k.err << "\n";
-    }*/
-    return std::sqrt(2.0 / (M_PI * x)) * k_k.val;
-  } else if (gsl_status == GSL_EUNDRFLW) {
-    return 0.0;
-  }
-  std::cout << "Need GSL_SUCCESS = " << GSL_SUCCESS
-            << " or GSL_EUNDRFLW = " << GSL_EUNDRFLW;
-  std::cout << "\n\ngsl_status = " << gsl_status << "\n";
-
-  throw std::bad_function_call();
 }
 
 void sps_testing(const Wavefunction &wf, const bool contact) {
@@ -842,8 +786,8 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // Need another special function
 
   // R_(γ5*1)a1a = R_(γ5*a)1a1 = 1
-  const auto R_g1a1a = R_abcd_contact(1.0, i_g0_g5(Fr), Fv0, Fr, Fv0);
-  const auto R_ga1a1 = R_abcd_contact(1.0, i_g0_g5(Fv0), Fr, Fv0, Fr);
+  const auto R_g1a1a = R_abcd_contact(1.0, Vee::i_g0_g5(Fr), Fv0, Fr, Fv0);
+  const auto R_ga1a1 = R_abcd_contact(1.0, Vee::i_g0_g5(Fv0), Fr, Fv0, Fr);
 
   std::cout << "\nRadial contact approximation checks\nR_aaaa = " << R_aaaa
             << "\t=0?\nR_abab = " << R_abab << "\t=0?\nR_abac = " << R_abac
@@ -866,8 +810,8 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   for (int i = 0; i < wf.grid().size();
        i += std::round(wf.grid().size() / 10)) {
     const auto ri = wf.grid().r(i);
-    const auto i0 = mod_sph_bessel_i(0.0, ri);
-    const auto k0 = mod_sph_bessel_k(0.0, ri);
+    const auto i0 = Vee::mod_sph_bessel_i(0.0, ri);
+    const auto k0 = Vee::mod_sph_bessel_k(0.0, ri);
 
     // B0_11(r) = k0(r)\int_0^r dr' i0(r) + i0(r)\int_r^\infty dr' k0(r)
     // B0_11(r) = k0(r)Shi[r] - i0(r)Ei[-r]
@@ -883,7 +827,7 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // With (-fagc + fcga) = (fbfd + gbgd) = 1, should have
   // R0_(γ1)111 = \int_0^inf B0_bd
 
-  const auto R0_g1111 = Rk_abcd(0.0, 1.0, i_g0_g5(F1), F1, F1, F1);
+  const auto R0_g1111 = Rk_abcd(0.0, 1.0, Vee::i_g0_g5(F1), F1, F1, F1);
   const auto R0_g1111_manual =
       NumCalc::integrate(1.0, 0.0, wf.grid().size(), B0_11, wf.grid().drdu()) *
       wf.grid().du();
@@ -965,8 +909,8 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
 
     auto V_v0v1_full = V_nv(false, wf.core(), Fv0, Fv1, 1.0, mu);
 
-    const auto i0_max = mod_sph_bessel_i(0.0, mu * 150.0);
-    const auto k0_max = mod_sph_bessel_k(0.0, mu * 150.0);
+    const auto i0_max = Vee::mod_sph_bessel_i(0.0, mu * 150.0);
+    const auto k0_max = Vee::mod_sph_bessel_k(0.0, mu * 150.0);
     /*if (i0_max == 0 & k0_max == 0) {
       V_v0v1_full = 0.0;
     } */
