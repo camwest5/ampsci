@@ -35,10 +35,10 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 
   const bool test = input.get<bool>("test", false);
-  if (test) {
-    sp_tdhf(input, wf);
-    return;
-  }
+  // if (test) {
+  //   sp_tdhf(input, wf);
+  //   return;
+  // }
 
   const auto e_handler = gsl_set_error_handler_off();
 
@@ -57,8 +57,8 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   gsl_set_error_handler(e_handler);
 }
 
-void sp_tdhf(const IO::InputBlock &input, const Wavefunction &wf) {
-  std::cout << "In test mode";
+double Dv_tdhf(const double mu, const Wavefunction &wf) {
+  // std::cout << "In test mode";
 
   DiracOperator::V_SP V_sp(wf.core());
   ExternalField::TDHF tdhf_Vsp(&V_sp, wf.vHF());
@@ -69,7 +69,6 @@ void sp_tdhf(const IO::InputBlock &input, const Wavefunction &wf) {
   tdhf_d.solve_core(0);
 
   const auto Fv = wf.valence()[0];
-  const double mu = 1.0;
 
   double Dv = 0.0;
 
@@ -86,6 +85,7 @@ void sp_tdhf(const IO::InputBlock &input, const Wavefunction &wf) {
       Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
     }
   }
+  return Dv;
 }
 
 void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
@@ -221,10 +221,12 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   const double N_mu = input.get<double>("N_mu", 100.0);
   const bool g0_both = input.get<bool>("g0", true);
 
-  if (input.get<bool>("test", false) == true) {
-    sps_testing(wf, contact);
-    return;
-  }
+  const bool test = input.get<bool>("test", false);
+
+  // if (input.get<bool>("test", false) == true) {
+  //   sps_testing(wf, contact);
+  //   return;
+  // }
 
   int i_ground = 0;
   double E_ground = wf.valence()[0].en();
@@ -296,18 +298,23 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
        log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
-    const auto mu = std::exp(log_mu);
     double Dv = 0;
+    const auto mu = std::exp(log_mu);
 
-    for (auto Fn : wf.basis()) {
-      if ((Fn.twoj() == Fv.twoj()) && (Fn != Fv)) {
-        // <v|d|n>
-        const auto d_vn = d_ab(wf.grid(), Fv, Fn);
+    if (test) {
+      Dv = Dv_tdhf(mu, wf);
+    } else {
 
-        // <n|V|v> = Σ_a (u_anav - u_anva)
-        const auto Vsps = V_nv(contact, wf.core(), Fv, Fn, y_sps, mu);
+      for (auto Fn : wf.basis()) {
+        if ((Fn.twoj() == Fv.twoj()) && (Fn != Fv)) {
+          // <v|d|n>
+          const auto d_vn = d_ab(wf.grid(), Fv, Fn);
 
-        Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
+          // <n|V|v> = Σ_a (u_anav - u_anva)
+          const auto Vsps = V_nv(contact, wf.core(), Fv, Fn, y_sps, mu);
+
+          Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
+        }
       }
     }
 
