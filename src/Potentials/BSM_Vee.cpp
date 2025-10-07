@@ -46,7 +46,7 @@ DiracSpinor V_SP_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
     VFv += Fdir - Fexch;
   }
 
-  return y * VFv;
+  return mu * y * VFv;
 }
 
 DiracSpinor Bk_ac_v(const int k, const double mu, const DiracSpinor &Fa,

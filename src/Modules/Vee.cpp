@@ -7,6 +7,7 @@
 #include "Maths/NumCalc_quadIntegrate.hpp"
 #include "Maths/SphericalBessel.hpp"
 #include "Physics/PhysConst_constants.hpp" // For GHz unit conversion
+#include "Potentials/BSM_Vee.hpp"
 #include "Wavefunction/Wavefunction.hpp"
 #include "ampsci/ampsci.hpp"
 #include <cmath>
@@ -61,7 +62,7 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
 double Dv_tdhf(const double mu, const Wavefunction &wf) {
   // std::cout << "In test mode";
 
-  DiracOperator::V_SP V_sp(wf.core());
+  DiracOperator::V_SP V_sp(wf.core(), mu);
   ExternalField::TDHF tdhf_Vsp(&V_sp, wf.vHF());
   tdhf_Vsp.solve_core(0, 100, false);
 
@@ -76,12 +77,22 @@ double Dv_tdhf(const double mu, const Wavefunction &wf) {
   for (auto Fn : wf.basis()) {
     if (Fn.kappa() == -Fv.kappa()) {
       // <v|d|n>
-      const auto d_vn = E1.rme3js(Fv.twoj(), Fn.twoj()) *
-                        (E1.reducedME(Fv, Fn) + tdhf_d.dV(Fv, Fn));
+      // const auto d_vn = E1.rme3js(Fv.twoj(), Fn.twoj()) *
+      //                   (E1.reducedME(Fv, Fn) + tdhf_d.dV(Fv, Fn));
+
+      const auto d_vn = d_ab(wf.grid(), Fv, Fn);
 
       // <n|V|v>
-      const auto Vsps = V_sp.rme3js(Fn.twoj(), Fv.twoj()) *
-                        (V_sp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
+      // const auto Vsps = V_sp.rme3js(Fn.twoj(), Fv.twoj()) *
+      //                   (V_sp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
+
+      // const auto Vsps = Fn * Vee::V_SP_Fv(wf.core(), Fv, Fn.kappa(), 1.0, mu);
+
+      // Using old calculation:
+      // const auto Vsps = V_nv(false, wf.core(), Fv, Fn, 1, mu);
+
+      // Using new calculation:
+      const auto Vsps = V_sp.fullME(Fn, Fv);
 
       Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
     }
@@ -256,37 +267,72 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 
   // Compare contact approximation with large μ
 
-  const auto test_max_mu = 1000.0;
-  const auto test_min_mu = 1e-6;
+  if (test) {
+    std::cout << "\n\n***Troubleshooting\n\n";
 
-  // Test ground with all core states
-  std::cout << "\nTesting V_nv in limits for all basis states |n> with valence "
-            << Fv.symbol()
-            << ".\nShowing >10% discrepancies.\n\nFor the exact "
-               "cases,\nμ->0 = "
-            << test_min_mu << "\nμ->∞ = " << test_max_mu;
+    // Check the Bs - appears to be working well!
+    // Should have that Rk_abcd = Fa*beta*Fc = Fb*B*Fd
 
-  std::cout << "\n\nCheck OK:\n|v>  κv   |n>  κn     massless exact (μ->0) "
-               " rel diff exact "
-               "(μ->∞)      contact  rel diff\n";
+    // Also check the full MEs
 
-  for (auto Fn : wf.basis()) {
-    if (Fn.twoj() == Fv.twoj()) {
-      const auto V_massless = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0);
-      const auto V_exact_min = V_nv(false, wf.core(), Fv, Fn, 1.0, test_min_mu);
-      const auto V_exact_max = V_nv(false, wf.core(), Fv, Fn, 1.0, test_max_mu);
-      const auto V_contact = V_nv(true, wf.core(), Fv, Fn, 1.0, test_max_mu);
+    // for (auto Fn : wf.basis())
+    //   for (auto Fa : wf.core()) {
+    //     {
+    //       const auto test_R = Rk_abcd(1, 1, Fn, Fa, Fa, Fv);
+    //       const auto test_V = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0001);
+    //       if (test_R != 0) {
+    //         // std::cout << "\n"
+    //         //           << test_R << " = " << Fn * Vee::bk_bd_v(1, 1, Fa, Fv, Fa)
+    //         //           << " = " << Fa * Vee::Bk_ac_v(1, 1, Fn, Fa, Fv) << "?";
+    //       }
 
-      const auto diff_massless =
-          std::abs((V_massless - V_exact_min) / V_massless);
-      const auto diff_contact = std::abs((V_contact - V_exact_max) / V_contact);
+    //       if (test_V != 0) {
+    //         std::cout << "\n"
+    //                   << test_V << " = "
+    //                   << Fn * Vee::V_SP_Fv(wf.core(), Fv, Fn.kappa(), 1.0,
+    //                                        0.0001)
+    //                   << "?";
+    //       }
+    //     }
+    //   }
 
-      if ((diff_massless > 0.1) || (diff_contact > 0.1)) {
-        fmt::print("{:3s} {:3}  {:4s} {:3} {:12.3e} {:12.3e} {:9.3f} "
-                   "{:12.3e} {:12.3e} {:9.3f}\n",
-                   Fv.shortSymbol(), Fv.kappa(), Fn.shortSymbol(), Fn.kappa(),
-                   V_massless, V_exact_min, diff_massless, V_exact_max,
-                   V_contact, diff_contact);
+  } else {
+    const auto test_max_mu = 1000.0;
+    const auto test_min_mu = 1e-6;
+
+    // Test ground with all core states
+    std::cout
+        << "\nTesting V_nv in limits for all basis states |n> with valence "
+        << Fv.symbol()
+        << ".\nShowing >10% discrepancies.\n\nFor the exact "
+           "cases,\nμ->0 = "
+        << test_min_mu << "\nμ->∞ = " << test_max_mu;
+
+    std::cout << "\n\nCheck OK:\n|v>  κv   |n>  κn     massless exact (μ->0) "
+                 " rel diff exact "
+                 "(μ->∞)      contact  rel diff\n";
+
+    for (auto Fn : wf.basis()) {
+      if (Fn.twoj() == Fv.twoj()) {
+        const auto V_massless = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0);
+        const auto V_exact_min =
+            V_nv(false, wf.core(), Fv, Fn, 1.0, test_min_mu);
+        const auto V_exact_max =
+            V_nv(false, wf.core(), Fv, Fn, 1.0, test_max_mu);
+        const auto V_contact = V_nv(true, wf.core(), Fv, Fn, 1.0, test_max_mu);
+
+        const auto diff_massless =
+            std::abs((V_massless - V_exact_min) / V_massless);
+        const auto diff_contact =
+            std::abs((V_contact - V_exact_max) / V_contact);
+
+        if ((diff_massless > 0.1) || (diff_contact > 0.1)) {
+          fmt::print("{:3s} {:3}  {:4s} {:3} {:12.3e} {:12.3e} {:9.3f} "
+                     "{:12.3e} {:12.3e} {:9.3f}\n",
+                     Fv.shortSymbol(), Fv.kappa(), Fn.shortSymbol(), Fn.kappa(),
+                     V_massless, V_exact_min, diff_massless, V_exact_max,
+                     V_contact, diff_contact);
+        }
       }
     }
   }
@@ -321,6 +367,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 
     // Multiply by hbar c
     Dv *= 1.0 / PhysConst::alpha;
+    Dv_TDHF *= 1.0 / PhysConst::alpha;
 
     const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = mod_sph_bessel_k(0.0, mu * wf.grid().rmax());

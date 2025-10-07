@@ -132,7 +132,6 @@ DiracSpinor TensorOperator::radial_rhs(const int kappa_a,
 //==============================================================================
 double TensorOperator::radialIntegral(const DiracSpinor &Fa,
                                       const DiracSpinor &Fb) const {
-
   const int kappa_a = Fa.kappa();
   if (isZero(kappa_a, Fb.kappa())) {
     return 0.0;
