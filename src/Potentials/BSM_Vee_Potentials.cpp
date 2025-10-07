@@ -48,7 +48,8 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
       }
     }
 
-    const auto phase = Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) / Fv.twojp1();
+    const auto phase =
+        Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) * (1.0 / Fv.twojp1());
 
     Fexch *= phase;
 

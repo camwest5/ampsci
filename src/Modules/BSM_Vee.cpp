@@ -615,7 +615,7 @@ double V_nv_direct(const bool contact, const std::vector<DiracSpinor> core,
     }
 
     const auto phase =
-        std::pow(-1.0, 0.5 * (Fv.twoj() - Fa.twoj())) / Fv.twojp1();
+        std::pow(-1.0, 0.5 * (Fv.twoj() - Fa.twoj())) * (1.0 / Fv.twojp1());
     u_naav *= phase;
     u_anva *= phase;
   }
