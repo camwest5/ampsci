@@ -9,7 +9,7 @@ namespace DiracOperator {
 
 //==============================================================================
 
-class V_SP : public TensorOperator {
+class V_SP final : public TensorOperator {
 public:
   V_SP(const std::vector<DiracSpinor> &core_in)
       : TensorOperator(0, Parity::odd), m_core(core_in) {}
@@ -52,7 +52,7 @@ generate_V_SP(const IO::InputBlock &input, const Wavefunction &wf) {
   if (input.has_option("help")) {
     return nullptr;
   }
-  return std::make_unique<V_SP>(wf.grid());
+  return std::make_unique<V_SP>(wf.core());
 }
 
 } // namespace DiracOperator

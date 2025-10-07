@@ -35,10 +35,11 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 
   const bool test = input.get<bool>("test", false);
-  // if (test) {
-  //   sp_tdhf(input, wf);
-  //   return;
-  // }
+  if (test) {
+    // sp_tdhf(input, wf);
+    // return;
+    std::cout << "\n***Using V_SP operator (test mode)***\n";
+  }
 
   const auto e_handler = gsl_set_error_handler_off();
 
@@ -62,11 +63,11 @@ double Dv_tdhf(const double mu, const Wavefunction &wf) {
 
   DiracOperator::V_SP V_sp(wf.core());
   ExternalField::TDHF tdhf_Vsp(&V_sp, wf.vHF());
-  tdhf_Vsp.solve_core(0);
+  tdhf_Vsp.solve_core(0, 100, false);
 
   DiracOperator::E1 E1(wf.grid());
   ExternalField::TDHF tdhf_d(&E1, wf.vHF());
-  tdhf_d.solve_core(0);
+  tdhf_d.solve_core(0, 100, false);
 
   const auto Fv = wf.valence()[0];
 
@@ -292,29 +293,29 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 
   std::cout << "\nAtomic EDM for " << Fv.symbol()
             << " with S-PS interaction (mediator mass = μ).\n   μ (m_e) "
-               "         Dv     i0_max     k0_max\n";
+               "         Dv     Dv_tdhf     i0_max     k0_max\n";
 
   // Currently looks at one valence state - ground
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
        log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
+    double Dv_TDHF = 0;
     double Dv = 0;
     const auto mu = std::exp(log_mu);
 
     if (test) {
-      Dv = Dv_tdhf(mu, wf);
-    } else {
+      Dv_TDHF = Dv_tdhf(mu, wf);
+    }
 
-      for (auto Fn : wf.basis()) {
-        if ((Fn.twoj() == Fv.twoj()) && (Fn != Fv)) {
-          // <v|d|n>
-          const auto d_vn = d_ab(wf.grid(), Fv, Fn);
+    for (auto Fn : wf.basis()) {
+      if ((Fn.twoj() == Fv.twoj()) && (Fn != Fv)) {
+        // <v|d|n>
+        const auto d_vn = d_ab(wf.grid(), Fv, Fn);
 
-          // <n|V|v> = Σ_a (u_anav - u_anva)
-          const auto Vsps = V_nv(contact, wf.core(), Fv, Fn, y_sps, mu);
+        // <n|V|v> = Σ_a (u_anav - u_anva)
+        const auto Vsps = V_nv(contact, wf.core(), Fv, Fn, y_sps, mu);
 
-          Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
-        }
+        Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
       }
     }
 
@@ -324,7 +325,8 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
     const auto i0_max = mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
 
-    fmt::print("{:10.4e} {:11.4e} {:10.1e} {:10.1e}\n", mu, Dv, i0_max, k0_max);
+    fmt::print("{:10.4e} {:11.4e} {:11.4e} {:10.1e} {:10.1e}\n", mu, Dv,
+               Dv_TDHF, i0_max, k0_max);
   }
 }
 
