@@ -363,7 +363,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
 double Dv_tdhf(const double mu, const Wavefunction &wf) {
   // std::cout << "In test mode";
 
-  DiracOperator::V_SP V_sp(wf.core(), mu);
+  DiracOperator::V_SP V_sp(wf.core(), mu, "sp");
   ExternalField::TDHF tdhf_Vsp(&V_sp, wf.vHF());
   tdhf_Vsp.solve_core(0);
 
@@ -385,7 +385,8 @@ double Dv_tdhf(const double mu, const Wavefunction &wf) {
 
       // <n|V|v>
 
-      // const auto Vsps = Fn * Vee::V_SP_Fv(wf.core(), Fv, Fn.kappa(), 1.0, mu);
+      // const auto Vsps =
+      // Fn * Vee::V_Fv(wf.core(), Fv, "sp", Fn.kappa(), 1.0, mu);
 
       // Using old implementation:
       // const auto Vsps = V_nv(false, wf.core(), Fv, Fn, 1, mu);
@@ -396,6 +397,18 @@ double Dv_tdhf(const double mu, const Wavefunction &wf) {
       // Using TDHF
       const auto Vsps = V_sp.rme3js(Fn.twoj(), Fv.twoj()) *
                         (V_sp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
+
+      const auto V_old = V_nv(false, wf.core(), Fv, Fn, 1, mu);
+
+      /*
+      if (Vsps != V_old) {
+        std::cout << "\n"
+                  << Fn.symbol() << "\t" << V_old << "\t" << Vsps - V_old;
+      }
+      */
+
+      // This numerically shows that <n|V|v> = <v|V|n>, i.e. V is Hermitian.
+      // std::cout << "\n" << V_sp.fullME(Fv, Fn) << "\t" << V_sp.fullME(Fn, Fv);
 
       Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
     }

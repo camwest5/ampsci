@@ -5,8 +5,13 @@
 #include "Wavefunction/Wavefunction.hpp"
 
 namespace Vee {
-DiracSpinor V_SP_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
-                    const int kappa_n, const double y, const double mu) {
+
+DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
+                 const std::string type, const int kappa_n, const double y,
+                 const double mu) {
+  if ((type != "sp") && (type != "va")) {
+    throw std::bad_function_call();
+  }
 
   // For safety
   if (Fv.kappa() != -kappa_n) {
@@ -17,23 +22,23 @@ DiracSpinor V_SP_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
 
   for (auto Fa : core) {
 
-    const auto Fdir = Fa.twojp1() * Bk_ac_v(0, mu, Fa, Fa, Fv);
+    const auto Fdir = Fa.twojp1() * Bk_ac_v(0, mu, type, Fa, Fa, Fv);
 
     DiracSpinor Fexch(Fa.n(), Fa.kappa(), Fa.grid_sptr());
 
     for (int twok = std::abs(Fa.twoj() - Fv.twoj());
          twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
       if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
-        const double k = 0.5 * twok;
-        const double twokp1 = twok + 1;
+        const int k = twok / 2;
+        const int twokp1 = twok + 1;
 
         const auto Fexch_1 = Angular::Ck_kk(k, -Fv.kappa(), Fa.kappa()) *
                              Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa()) *
-                             bk_bd_v(k, mu, Fa, Fv, Fa);
+                             bk_bd_v(k, mu, type, Fa, Fv, Fa);
 
         const auto Fexch_2 = Angular::Ck_kk(k, Fa.kappa(), Fv.kappa()) *
                              Angular::Ck_kk(k, -Fv.kappa(), -Fa.kappa()) *
-                             Bk_ac_v(k, mu, Fa, Fv, Fa);
+                             Bk_ac_v(k, mu, type, Fa, Fv, Fa);
 
         Fexch += twokp1 * (Fexch_1 + Fexch_2);
       }
@@ -49,8 +54,9 @@ DiracSpinor V_SP_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
   return mu * y * VFv;
 }
 
-DiracSpinor Bk_ac_v(const int k, const double mu, const DiracSpinor &Fa,
-                    const DiracSpinor &Fc, const DiracSpinor &Fv) {
+DiracSpinor Bk_ac_v(const int k, const double mu, const std::string type,
+                    const DiracSpinor &Fa, const DiracSpinor &Fc,
+                    const DiracSpinor &Fv) {
   const auto &gr = Fa.grid();
   const auto &r = gr.r();
 
@@ -64,6 +70,16 @@ DiracSpinor Bk_ac_v(const int k, const double mu, const DiracSpinor &Fa,
     k_k[i_gr] = mod_sph_bessel_k(k, x);
   }
 
+  auto mod_Fc = Fc;
+  auto mod_Fv = Fv;
+
+  if (type == "sp") {
+    mod_Fc = g0(Fc);
+    mod_Fv = i_g0_g5(Fv);
+  } else if (type == "va") {
+    mod_Fv = -1.0 * ig5(Fv);
+  }
+
   const auto g0Fc = g0(Fc);
 
   // Integrate
@@ -71,10 +87,10 @@ DiracSpinor Bk_ac_v(const int k, const double mu, const DiracSpinor &Fa,
 
   for (int i_mid = 0; i_mid < gr.size(); ++i_mid) {
     double lower_ff =
-        NumCalc::integrate(1.0, 0, i_mid, i_k, Fa.f(), g0Fc.f(), gr.drdu());
+        NumCalc::integrate(1.0, 0, i_mid, i_k, Fa.f(), mod_Fc.f(), gr.drdu());
 
     double lower_gg =
-        NumCalc::integrate(1.0, 0, i_mid, i_k, Fa.g(), g0Fc.g(), gr.drdu());
+        NumCalc::integrate(1.0, 0, i_mid, i_k, Fa.g(), mod_Fc.g(), gr.drdu());
 
     // For r0 point
     if (i_mid == 0) {
@@ -83,21 +99,22 @@ DiracSpinor Bk_ac_v(const int k, const double mu, const DiracSpinor &Fa,
     }
 
     const double upper_ff = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
-                                               Fa.f(), g0Fc.f(), gr.drdu());
+                                               Fa.f(), mod_Fc.f(), gr.drdu());
 
     const double upper_gg = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
-                                               Fa.g(), g0Fc.g(), gr.drdu());
+                                               Fa.g(), mod_Fc.g(), gr.drdu());
 
     result[i_mid] = (k_k[i_mid] * (lower_ff + lower_gg) +
                      i_k[i_mid] * (upper_ff + upper_gg)) *
                     gr.du();
   }
 
-  return result * i_g0_g5(Fv);
+  return result * mod_Fv;
 }
 
-DiracSpinor bk_bd_v(const int k, const double mu, const DiracSpinor &Fb,
-                    const DiracSpinor &Fd, const DiracSpinor &Fv) {
+DiracSpinor bk_bd_v(const int k, const double mu, const std::string type,
+                    const DiracSpinor &Fb, const DiracSpinor &Fd,
+                    const DiracSpinor &Fv) {
   const auto &gr = Fb.grid();
   const auto &r = gr.r();
 
@@ -109,6 +126,16 @@ DiracSpinor bk_bd_v(const int k, const double mu, const DiracSpinor &Fb,
     const auto x = mu * r[i_gr];
     i_k[i_gr] = mod_sph_bessel_i(k, x);
     k_k[i_gr] = mod_sph_bessel_k(k, x);
+  }
+
+  auto mod_Fd = Fd;
+  auto mod_Fv = Fv;
+
+  if (type == "sp") {
+    mod_Fd = i_g0_g5(Fd);
+    mod_Fv = g0(Fv);
+  } else if (type == "va") {
+    mod_Fd = -1.0 * ig5(Fd);
   }
 
   const auto ig0g5Fd = i_g0_g5(Fd);
@@ -140,12 +167,19 @@ DiracSpinor bk_bd_v(const int k, const double mu, const DiracSpinor &Fb,
                     gr.du();
   }
 
-  return result * g0(Fv);
+  return result * mod_Fv;
 }
 
 DiracSpinor g0(const DiracSpinor &Fa) {
   DiracSpinor Fb(Fa);
   Fb.g() = (-1.0 * Fa).g();
+  return Fb;
+}
+
+DiracSpinor ig5(const DiracSpinor &Fa) {
+  DiracSpinor Fb(Fa);
+  Fb.f() = (-1.0 * Fa).g();
+  Fb.g() = Fa.f();
   return Fb;
 }
 
