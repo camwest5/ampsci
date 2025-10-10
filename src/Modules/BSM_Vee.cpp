@@ -1,13 +1,13 @@
-#include "Modules/Vee.hpp"
+#include "Modules/BSM_Vee.hpp"
 #include "Angular/Wigner369j.hpp"
 #include "DiracOperator/Operators/Ek.hpp"
-#include "DiracOperator/Operators/V_SP.hpp"
+#include "DiracOperator/Operators/Vee.hpp"
 #include "ExternalField/TDHF.hpp"
 #include "IO/InputBlock.hpp"
 #include "Maths/NumCalc_quadIntegrate.hpp"
 #include "Maths/SphericalBessel.hpp"
 #include "Physics/PhysConst_constants.hpp" // For GHz unit conversion
-#include "Potentials/BSM_Vee.hpp"
+#include "Potentials/BSM_Vee_Potentials.hpp"
 #include "Wavefunction/Wavefunction.hpp"
 #include "ampsci/ampsci.hpp"
 #include <cmath>
@@ -15,10 +15,11 @@
 
 namespace Module {
 
-void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
+void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   input.check({{"", "Introduces a new electron-electron "
                     "interaction."},
-               {"type", "'sp' (scalar-pseudoscalar), 'ss' (scalar-scalar), "
+               {"type", "'sp' (scalar-pseudoscalar), 'va' (vector-axial "
+                        "vector), 'ss' (scalar-scalar), "
                         "'vv' (vector-vector) ['sp']"},
                {"tdhf", "Include TDHF calcs for 'sp'? [false]"},
                {"contact", "Consider μ->infty, i.e. a contact force [false]"},
@@ -47,8 +48,8 @@ void Vee(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const std::string int_type = input.get<std::string>("type", "sp");
 
-  if (int_type == "sp" || int_type == "ps" || int_type == "sps") {
-    sps(input, wf);
+  if (int_type == "sp" || int_type == "va") {
+    calculate_EDMs(input, wf);
   } else if (int_type == "ss" || int_type == "vv") {
     ee_isotope_shift(int_type, input, wf);
   } else {
@@ -185,7 +186,7 @@ double dE(const double mu, const std::string int_type,
   return dE_val;
 }
 
-void sps(const IO::InputBlock &input, const Wavefunction &wf) {
+void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const bool contact = input.get<bool>("contact", false);
   const double min_mu = input.get<double>("min_mu", 1.0e-4);
@@ -193,7 +194,7 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   const double N_mu = input.get<double>("N_mu", 100.0);
   const bool g0_both = input.get<bool>("g0", true);
   const bool tdhf = input.get<bool>("tdhf", false);
-
+  const std::string type = input.get<std::string>("type", "");
   const bool test = input.get<bool>("test", false);
 
   // if (input.get<bool>("test", false) == true) {
@@ -329,13 +330,13 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
     // Multiply by hbar c
     Dv *= 1.0 / PhysConst::alpha;
 
-    const auto i0_max = Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
-    const auto k0_max = Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
+    const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
+    const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
 
     if (tdhf) {
       std::cout << "\nμ = " << mu << "\n";
       double Dv_TDHF = 0;
-      Dv_TDHF = Dv_tdhf(mu, wf);
+      Dv_TDHF = Dv_tdhf(type, mu, wf);
       Dv_TDHF *= 1.0 / PhysConst::alpha;
 
       Dv_TDHFs.push_back(Dv_TDHF);
@@ -360,11 +361,12 @@ void sps(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 }
 
-double Dv_tdhf(const double mu, const Wavefunction &wf) {
+double Dv_tdhf(const std::string type, const double mu,
+               const Wavefunction &wf) {
   // std::cout << "In test mode";
 
-  DiracOperator::V_SP V_sp(wf.core(), mu, "sp");
-  ExternalField::TDHF tdhf_Vsp(&V_sp, wf.vHF());
+  DiracOperator::Vee VeeOp(wf.core(), mu, type);
+  ExternalField::TDHF tdhf_Vsp(&VeeOp, wf.vHF());
   tdhf_Vsp.solve_core(0);
 
   DiracOperator::E1 E1(wf.grid());
@@ -392,11 +394,11 @@ double Dv_tdhf(const double mu, const Wavefunction &wf) {
       // const auto Vsps = V_nv(false, wf.core(), Fv, Fn, 1, mu);
 
       // Using new implementation:
-      // const auto Vsps = V_sp.fullME(Fn, Fv);
+      // const auto Vsps = VeeOp.fullME(Fn, Fv);
 
       // Using TDHF
-      const auto Vsps = V_sp.rme3js(Fn.twoj(), Fv.twoj()) *
-                        (V_sp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
+      const auto Vsps = VeeOp.rme3js(Fn.twoj(), Fv.twoj()) *
+                        (VeeOp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
 
       const auto V_old = V_nv(false, wf.core(), Fv, Fn, 1, mu);
 
@@ -408,7 +410,7 @@ double Dv_tdhf(const double mu, const Wavefunction &wf) {
       */
 
       // This numerically shows that <n|V|v> = <v|V|n>, i.e. V is Hermitian.
-      // std::cout << "\n" << V_sp.fullME(Fv, Fn) << "\t" << V_sp.fullME(Fn, Fv);
+      // std::cout << "\n" << VeeOp.fullME(Fv, Fn) << "\t" << VeeOp.fullME(Fn, Fv);
 
       Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
     }
@@ -502,10 +504,10 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
   //const auto i0 = std::max(Fa.min_pt(), Fc.min_pt());
   //const auto imax = std::min(Fa.max_pt(), Fc.max_pt());
 
-  const auto g_Fc = int_type == "vv" ? Fc : g0_both ? Vee::g0(Fc) : Fc;
+  const auto g_Fc = int_type == "vv" ? Fc : g0_both ? BSM_Vee::g0(Fc) : Fc;
 
-  const auto g_Fd = int_type == "sp" ? Vee::i_g0_g5(Fd) :
-                    int_type == "ss" ? Vee::g0(Fd) :
+  const auto g_Fd = int_type == "sp" ? BSM_Vee::i_g0_g5(Fd) :
+                    int_type == "ss" ? BSM_Vee::g0(Fd) :
                                        Fd;
 
   const auto screening_function = Bk_ab(k, mu, Fb, g_Fd);
@@ -527,8 +529,8 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 
   const auto &gr = Fa.grid();
   const auto &r = gr.r();
-  const auto g0_Fc = Vee::g0(Fc);
-  const auto ig0g5_Fd = Vee::i_g0_g5(Fd);
+  const auto g0_Fc = BSM_Vee::g0(Fc);
+  const auto ig0g5_Fd = BSM_Vee::i_g0_g5(Fd);
 
   // Delta case
 
@@ -628,9 +630,9 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
                         const DiracSpinor &Fb, const DiracSpinor &Fc,
                         const DiracSpinor &Fd) {
-  const auto screening_function = Coulomb::yk_ab(k, Fb, Vee::i_g0_g5(Fd));
+  const auto screening_function = Coulomb::yk_ab(k, Fb, BSM_Vee::i_g0_g5(Fd));
 
-  const auto g0_Fc = Vee::g0(Fc);
+  const auto g0_Fc = BSM_Vee::g0(Fc);
 
   const auto Rff =
       NumCalc::integrate(1.0, 0, Fa.grid().size(), Fa.f(), g0_Fc.f(),
@@ -656,8 +658,8 @@ std::vector<double> Bk_ab(const double k, const double mu,
 
   for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
     const auto x = mu * r[i_gr];
-    i_k[i_gr] = Vee::mod_sph_bessel_i(k, x);
-    k_k[i_gr] = Vee::mod_sph_bessel_k(k, x);
+    i_k[i_gr] = BSM_Vee::mod_sph_bessel_i(k, x);
+    k_k[i_gr] = BSM_Vee::mod_sph_bessel_k(k, x);
 
     //i_k[i_gr] = std::exp(x) / (2 * x);
     //k_k[i_gr] = std::exp(-x) / x;
@@ -799,8 +801,8 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // Need another special function
 
   // R_(γ5*1)a1a = R_(γ5*a)1a1 = 1
-  const auto R_g1a1a = R_abcd_contact(1.0, Vee::i_g0_g5(Fr), Fv0, Fr, Fv0);
-  const auto R_ga1a1 = R_abcd_contact(1.0, Vee::i_g0_g5(Fv0), Fr, Fv0, Fr);
+  const auto R_g1a1a = R_abcd_contact(1.0, BSM_Vee::i_g0_g5(Fr), Fv0, Fr, Fv0);
+  const auto R_ga1a1 = R_abcd_contact(1.0, BSM_Vee::i_g0_g5(Fv0), Fr, Fv0, Fr);
 
   std::cout << "\nRadial contact approximation checks\nR_aaaa = " << R_aaaa
             << "\t=0?\nR_abab = " << R_abab << "\t=0?\nR_abac = " << R_abac
@@ -823,8 +825,8 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   for (int i = 0; i < wf.grid().size();
        i += std::round(wf.grid().size() / 10)) {
     const auto ri = wf.grid().r(i);
-    const auto i0 = Vee::mod_sph_bessel_i(0.0, ri);
-    const auto k0 = Vee::mod_sph_bessel_k(0.0, ri);
+    const auto i0 = BSM_Vee::mod_sph_bessel_i(0.0, ri);
+    const auto k0 = BSM_Vee::mod_sph_bessel_k(0.0, ri);
 
     // B0_11(r) = k0(r)\int_0^r dr' i0(r) + i0(r)\int_r^\infty dr' k0(r)
     // B0_11(r) = k0(r)Shi[r] - i0(r)Ei[-r]
@@ -840,7 +842,7 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // With (-fagc + fcga) = (fbfd + gbgd) = 1, should have
   // R0_(γ1)111 = \int_0^inf B0_bd
 
-  const auto R0_g1111 = Rk_abcd(0.0, 1.0, Vee::i_g0_g5(F1), F1, F1, F1);
+  const auto R0_g1111 = Rk_abcd(0.0, 1.0, BSM_Vee::i_g0_g5(F1), F1, F1, F1);
   const auto R0_g1111_manual =
       NumCalc::integrate(1.0, 0.0, wf.grid().size(), B0_11, wf.grid().drdu()) *
       wf.grid().du();
@@ -922,8 +924,8 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
 
     auto V_v0v1_full = V_nv(false, wf.core(), Fv0, Fv1, 1.0, mu);
 
-    const auto i0_max = Vee::mod_sph_bessel_i(0.0, mu * 150.0);
-    const auto k0_max = Vee::mod_sph_bessel_k(0.0, mu * 150.0);
+    const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * 150.0);
+    const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * 150.0);
     /*if (i0_max == 0 & k0_max == 0) {
       V_v0v1_full = 0.0;
     } */

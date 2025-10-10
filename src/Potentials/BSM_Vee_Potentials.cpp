@@ -1,10 +1,10 @@
 #pragma once
 #include "Angular/Wigner369j.hpp"
-#include "DiracOperator/Operators/V_SP.hpp"
+#include "DiracOperator/Operators/Vee.hpp"
 #include "IO/InputBlock.hpp"
 #include "Wavefunction/Wavefunction.hpp"
 
-namespace Vee {
+namespace BSM_Vee {
 
 DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
                  const std::string type, const int kappa_n, const double y,
@@ -80,8 +80,6 @@ DiracSpinor Bk_ac_v(const int k, const double mu, const std::string type,
     mod_Fv = -1.0 * ig5(Fv);
   }
 
-  const auto g0Fc = g0(Fc);
-
   // Integrate
   std::vector<double> result(gr.size());
 
@@ -138,17 +136,15 @@ DiracSpinor bk_bd_v(const int k, const double mu, const std::string type,
     mod_Fd = -1.0 * ig5(Fd);
   }
 
-  const auto ig0g5Fd = i_g0_g5(Fd);
-
   // Integrate
   std::vector<double> result(gr.size());
 
   for (int i_mid = 0; i_mid < gr.size(); ++i_mid) {
     double lower_ff =
-        NumCalc::integrate(1.0, 0, i_mid, i_k, Fb.f(), ig0g5Fd.f(), gr.drdu());
+        NumCalc::integrate(1.0, 0, i_mid, i_k, Fb.f(), mod_Fd.f(), gr.drdu());
 
     double lower_gg =
-        NumCalc::integrate(1.0, 0, i_mid, i_k, Fb.g(), ig0g5Fd.g(), gr.drdu());
+        NumCalc::integrate(1.0, 0, i_mid, i_k, Fb.g(), mod_Fd.g(), gr.drdu());
 
     // For r0 point
     if (i_mid == 0) {
@@ -157,10 +153,10 @@ DiracSpinor bk_bd_v(const int k, const double mu, const std::string type,
     }
 
     const double upper_ff = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
-                                               Fb.f(), ig0g5Fd.f(), gr.drdu());
+                                               Fb.f(), mod_Fd.f(), gr.drdu());
 
     const double upper_gg = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
-                                               Fb.g(), ig0g5Fd.g(), gr.drdu());
+                                               Fb.g(), mod_Fd.g(), gr.drdu());
 
     result[i_mid] = (k_k[i_mid] * (lower_ff + lower_gg) +
                      i_k[i_mid] * (upper_ff + upper_gg)) *
@@ -233,4 +229,4 @@ double mod_sph_bessel_k(double n, double x) {
   throw std::bad_function_call();
 }
 
-} // namespace Vee
+} // namespace BSM_Vee

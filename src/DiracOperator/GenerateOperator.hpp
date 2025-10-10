@@ -28,7 +28,7 @@ static const std::vector<std::pair<
                   {"sigma_r", &generate_sigma_r},
                   {"pnc", &generate_pnc},
                   {"Vrad", &generate_Vrad},
-                  {"V_SP", &generate_V_SP},
+                  {"Vee", &generate_Vee},
                   {"MLVP", &generate_MLVP},
                   {"dr", &generate_dr},
                   {"p", &generate_p},

@@ -6,7 +6,7 @@
 #include "DiracOperator/Operators/PNC.hpp"
 #include "DiracOperator/Operators/QED.hpp"
 #include "DiracOperator/Operators/RadialF.hpp"
-#include "DiracOperator/Operators/V_SP.hpp"
+#include "DiracOperator/Operators/Vee.hpp"
 #include "DiracOperator/Operators/hfs.hpp"
 #include "DiracOperator/Operators/jL.hpp"
 #include "DiracOperator/Operators/jls.hpp"

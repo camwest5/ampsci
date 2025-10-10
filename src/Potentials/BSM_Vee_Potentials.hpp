@@ -1,10 +1,10 @@
 #pragma once
 #include "Angular/Wigner369j.hpp"
-#include "DiracOperator/Operators/V_SP.hpp"
+#include "DiracOperator/Operators/Vee.hpp"
 #include "IO/InputBlock.hpp"
 #include "Wavefunction/Wavefunction.hpp"
 
-namespace Vee {
+namespace BSM_Vee {
 DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
                  const std::string type, const int kappa_n, const double y,
                  const double mu);
@@ -20,4 +20,4 @@ DiracSpinor i_g0_g5(const DiracSpinor &Fa);
 double mod_sph_bessel_i(double n, double x);
 double mod_sph_bessel_k(double n, double x);
 
-} // namespace Vee
+} // namespace BSM_Vee

@@ -3,14 +3,14 @@
 #include "Wavefunction/Wavefunction.hpp"
 
 namespace Module {
-void Vee(const IO::InputBlock &input, const Wavefunction &wf);
-double Dv_tdhf(const double mu, const Wavefunction &wf);
+void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf);
+double Dv_tdhf(const std::string type, const double mu, const Wavefunction &wf);
 void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
                       const Wavefunction &wf);
 double dE(const double mu, const std::string int_type,
           const std::vector<DiracSpinor> &core, const DiracSpinor Fv);
 
-void sps(const IO::InputBlock &input, const Wavefunction &wf);
+void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf);
 
 double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb);
 double V_nv(const bool contact, const std::vector<DiracSpinor> core,

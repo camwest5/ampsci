@@ -2,10 +2,10 @@
 // Add new module includes here:
 // (Modules don't _need_ to be in Modules/ directory
 #include "Kionisation/Module_Kionisation.hpp"
+#include "Modules/BSM_Vee.hpp"
 #include "Modules/Breit.hpp"
 #include "Modules/HFAnomaly.hpp"
 #include "Modules/VQE.hpp"
-#include "Modules/Vee.hpp"
 #include "Modules/basic.hpp"
 #include "Modules/exampleModule.hpp"
 #include "Modules/isotopeShift.hpp"
@@ -94,8 +94,7 @@ static const std::vector<ModuleInfo> module_list{
      "Calculating muonic wavefunctions, energies, matrix elements - somewhat "
      "obsolete after introduction of Exotic{} into ampsci main"},
     {"VQE", &VQE, "For testing/playing with VQE method"},
-    {"Vee", &Vee, "Introduces scalar-pseudoscalar e-e interaction"},
-
+    {"BSM_Vee", &BSM_Vee, "Introduces scalar-pseudoscalar e-e interaction"},
     {"exampleModule", &exampleModule, "A short description of the module"}};
 
 } // namespace Module
