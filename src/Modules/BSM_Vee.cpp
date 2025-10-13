@@ -48,10 +48,8 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const std::string int_type = input.get<std::string>("type", "sp");
 
-  if (int_type == "sp") {
-    calculate_EDMs(input, wf);
-  } else if (int_type == "va") {
-    transition_amplitudes(input, wf);
+  if (int_type == "sp" | int_type == "va") {
+    D_matrix_elements(input, wf);
   } else if (int_type == "ss" || int_type == "vv") {
     ee_isotope_shift(int_type, input, wf);
   } else {
@@ -188,99 +186,7 @@ double dE(const double mu, const std::string int_type,
   return dE_val;
 }
 
-void transition_amplitudes(const IO::InputBlock &input,
-                           const Wavefunction &wf) {
-
-  const bool contact = input.get<bool>("contact", false);
-  const double min_mu = input.get<double>("min_mu", 1.0e-4);
-  const double max_mu = input.get<double>("max_mu", 1.0e4);
-  const double N_mu = input.get<double>("N_mu", 100.0);
-  const bool tdhf = input.get<bool>("tdhf", false);
-  const bool test = input.get<bool>("test", false);
-
-  int i_ground = 0;
-  double E_ground = wf.valence()[0].en();
-
-  // Find the ground state of the given valence states
-  for (int i = 1; i < wf.valence().size(); ++i) {
-    const double E_test = wf.valence()[i].en();
-
-    if (E_test < E_ground) {
-      E_ground = E_test;
-      i_ground = i;
-    }
-  }
-
-  const auto n_ground = wf.valence()[i_ground].n();
-  const auto kappa_ground = wf.valence()[i_ground].kappa();
-
-  const int v_n = input.get<int>("n", n_ground);
-  const int v_kappa = input.get<int>("kappa", kappa_ground);
-
-  const auto Fv = *wf.getState(v_n, v_kappa);
-
-  const auto Fw = wf.valence()[0];
-
-  const double y_sps = 1;
-
-  const auto test_max_mu = 1000.0;
-  const auto test_min_mu = 1e-6;
-
-  std::vector<double> Dv_TDHFs;
-  std::vector<double> Dvs;
-  std::vector<double> i0_maxs;
-  std::vector<double> k0_maxs;
-  std::vector<double> mus;
-
-  if (tdhf) {
-    std::cout << "\nRunning TDHF for Vee (V-VA).\n";
-
-  } else {
-    std::cout << "\nCalculating transition amplitudes for <" << Fw.shortSymbol()
-              << "|V|" << Fv.shortSymbol()
-              << ">\n   μ (m_e) "
-                 "         Dv     i0_max     k0_max\n";
-  }
-
-  // Currently looks at one valence state - ground
-  for (double log_mu = log(min_mu); log_mu < log(max_mu);
-       log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
-
-    const auto mu = std::exp(log_mu);
-    double Dv = calc_Dv("va", mu, tdhf, wf);
-
-    const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
-    const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
-
-    if (tdhf) {
-      std::cout << "\nμ = " << mu << "\n";
-      double Dv_TDHF = 0;
-      Dv_TDHF = calc_Dv("va", mu, tdhf, wf);
-
-      Dv_TDHFs.push_back(Dv_TDHF);
-      Dvs.push_back(Dv);
-      i0_maxs.push_back(i0_max);
-      k0_maxs.push_back(k0_max);
-      mus.push_back(mu);
-    } else {
-      fmt::print("{:10.4e} {:11.4e} {:10.1e} {:10.1e}\n", mu, Dv, i0_max,
-                 k0_max);
-    }
-  }
-
-  if (tdhf) {
-    std::cout << "\nCalculating transition amplitudes for <" << Fw.shortSymbol()
-              << "|V|" << Fv.shortSymbol()
-              << ">\n   μ (m_e) "
-                 "         Dv     i0_max     k0_max\n";
-    for (int i = 0; i < mus.size(); ++i) {
-      fmt::print("{:10.4e} {:11.4e} {:11.4e} {:10.1e} {:10.1e}\n", mus[i],
-                 Dvs[i], Dv_TDHFs[i], i0_maxs[i], k0_maxs[i]);
-    }
-  }
-}
-
-void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
+void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const bool contact = input.get<bool>("contact", false);
   const double min_mu = input.get<double>("min_mu", 1.0e-4);
@@ -315,42 +221,13 @@ void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
   const int v_n = input.get<int>("n", n_ground);
   const int v_kappa = input.get<int>("kappa", kappa_ground);
 
-  const auto Fv = *wf.getState(v_n, v_kappa);
+  // const auto Fv = *wf.getState(v_n, v_kappa);
+  const auto Fv = wf.valence()[0];
+  const auto Fw = wf.valence()[1];
 
   const double y_sps = 1;
 
   // Check that limits agree
-
-  // Compare contact approximation with large μ
-
-  // if (test) {
-  //   std::cout << "\n\n***Troubleshooting\n\n";
-
-  //   // Check the Bs - appears to be working well!
-  //   // Should have that Rk_abcd = Fa*beta*Fc = Fb*B*Fd
-
-  //   // Also check the full MEs
-
-  //   // for (auto Fn : wf.basis())
-  //   //   for (auto Fa : wf.core()) {
-  //   //     {
-  //   //       const auto test_R = Rk_abcd(1, 1, Fn, Fa, Fa, Fv);
-  //   //       const auto test_V = V_nv_direct(false, wf.core(), Fv, Fn, 1.0, 0.0001);
-  //   //       if (test_R != 0) {
-  //   //         // std::cout << "\n"
-  //   //         //           << test_R << " = " << Fn * Vee::bk_bd_v(1, 1, Fa, Fv, Fa)
-  //   //         //           << " = " << Fa * Vee::Bk_ac_v(1, 1, Fn, Fa, Fv) << "?";
-  //   //       }
-
-  //   //       if (test_V != 0) {
-  //   //         std::cout << "\n"
-  //   //                   << test_V << " = "
-  //   //                   << Fn * Vee::V_SP_Fv(wf.core(), Fv, Fn.kappa(), 1.0,
-  //   //                                        0.0001)
-  //   //                   << "?";
-  //   //       }
-  //   //     }
-  //   //   }
 
   const auto test_max_mu = 1000.0;
   const auto test_min_mu = 1e-6;
@@ -397,11 +274,12 @@ void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
   std::vector<double> mus;
 
   if (tdhf) {
-    std::cout << "\nRunning TDHF for Vee_SP.\n";
+    std::cout << "\nRunning TDHF for Vee_" << type << ".\n";
 
   } else {
-    std::cout << "\nAtomic EDM for " << Fv.symbol()
-              << " with S-PS interaction (mediator mass = μ).\n   μ (m_e) "
+    std::cout << "\nCalculating <" << Fw.symbol() << "|V|" << Fv.symbol()
+              << "> with " << type
+              << " interaction (mediator mass = μ).\n   μ (m_e) "
                  "         Dv     i0_max     k0_max\n";
   }
 
@@ -410,7 +288,7 @@ void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
        log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
     const auto mu = std::exp(log_mu);
-    double Dv = calc_Dv(type, mu, false, wf);
+    double Dv = calc_Dv(type, mu, false, wf, Fv, Fv);
 
     const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
@@ -418,7 +296,7 @@ void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
     if (tdhf) {
       std::cout << "\nμ = " << mu << "\n";
       double Dv_TDHF = 0;
-      Dv_TDHF = calc_Dv(type, mu, true, wf);
+      Dv_TDHF = calc_Dv(type, mu, true, wf, Fv, Fv);
 
       Dv_TDHFs.push_back(Dv_TDHF);
       Dvs.push_back(Dv);
@@ -432,9 +310,10 @@ void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 
   if (tdhf) {
-    std::cout << "\nAtomic EDM for " << Fv.symbol()
-              << " with S-PS interaction (mediator mass = μ).\n   μ (m_e) "
-                 "         Dv     Dv_tdhf     i0_max     k0_max\n";
+    std::cout << "\nCalculating <" << Fw.symbol() << "|D|" << Fv.symbol()
+              << "> with " << type
+              << " interaction (mediator mass = μ).\n   μ (m_e) "
+                 "          D      D_tdfh     i0_max     k0_max\n";
     for (int i = 0; i < mus.size(); ++i) {
       fmt::print("{:10.4e} {:11.4e} {:11.4e} {:10.1e} {:10.1e}\n", mus[i],
                  Dvs[i], Dv_TDHFs[i], i0_maxs[i], k0_maxs[i]);
@@ -447,7 +326,11 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
   const auto Fv = wf.valence()[0];
   auto Fw(Fv);
   if (type == "va") {
-    Fw = wf.valence()[1];
+    if (wf.valence().size() > 1) {
+      Fw = wf.valence()[1];
+    } else {
+      Fw = wf.core()[wf.core().size() - 1];
+    }
   }
   return calc_Dv(type, mu, tdhf, wf, Fv, Fw);
 }
