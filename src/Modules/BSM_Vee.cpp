@@ -48,8 +48,10 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const std::string int_type = input.get<std::string>("type", "sp");
 
-  if (int_type == "sp" || int_type == "va") {
+  if (int_type == "sp") {
     calculate_EDMs(input, wf);
+  } else if (int_type == "va") {
+    transition_amplitudes(input, wf);
   } else if (int_type == "ss" || int_type == "vv") {
     ee_isotope_shift(int_type, input, wf);
   } else {
@@ -186,6 +188,98 @@ double dE(const double mu, const std::string int_type,
   return dE_val;
 }
 
+void transition_amplitudes(const IO::InputBlock &input,
+                           const Wavefunction &wf) {
+
+  const bool contact = input.get<bool>("contact", false);
+  const double min_mu = input.get<double>("min_mu", 1.0e-4);
+  const double max_mu = input.get<double>("max_mu", 1.0e4);
+  const double N_mu = input.get<double>("N_mu", 100.0);
+  const bool tdhf = input.get<bool>("tdhf", false);
+  const bool test = input.get<bool>("test", false);
+
+  int i_ground = 0;
+  double E_ground = wf.valence()[0].en();
+
+  // Find the ground state of the given valence states
+  for (int i = 1; i < wf.valence().size(); ++i) {
+    const double E_test = wf.valence()[i].en();
+
+    if (E_test < E_ground) {
+      E_ground = E_test;
+      i_ground = i;
+    }
+  }
+
+  const auto n_ground = wf.valence()[i_ground].n();
+  const auto kappa_ground = wf.valence()[i_ground].kappa();
+
+  const int v_n = input.get<int>("n", n_ground);
+  const int v_kappa = input.get<int>("kappa", kappa_ground);
+
+  const auto Fv = *wf.getState(v_n, v_kappa);
+
+  const auto Fw = wf.valence()[0];
+
+  const double y_sps = 1;
+
+  const auto test_max_mu = 1000.0;
+  const auto test_min_mu = 1e-6;
+
+  std::vector<double> Dv_TDHFs;
+  std::vector<double> Dvs;
+  std::vector<double> i0_maxs;
+  std::vector<double> k0_maxs;
+  std::vector<double> mus;
+
+  if (tdhf) {
+    std::cout << "\nRunning TDHF for Vee (V-VA).\n";
+
+  } else {
+    std::cout << "\nCalculating transition amplitudes for <" << Fw.shortSymbol()
+              << "|V|" << Fv.shortSymbol()
+              << ">\n   μ (m_e) "
+                 "         Dv     i0_max     k0_max\n";
+  }
+
+  // Currently looks at one valence state - ground
+  for (double log_mu = log(min_mu); log_mu < log(max_mu);
+       log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
+
+    const auto mu = std::exp(log_mu);
+    double Dv = calc_Dv("va", mu, tdhf, wf);
+
+    const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
+    const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
+
+    if (tdhf) {
+      std::cout << "\nμ = " << mu << "\n";
+      double Dv_TDHF = 0;
+      Dv_TDHF = calc_Dv("va", mu, tdhf, wf);
+
+      Dv_TDHFs.push_back(Dv_TDHF);
+      Dvs.push_back(Dv);
+      i0_maxs.push_back(i0_max);
+      k0_maxs.push_back(k0_max);
+      mus.push_back(mu);
+    } else {
+      fmt::print("{:10.4e} {:11.4e} {:10.1e} {:10.1e}\n", mu, Dv, i0_max,
+                 k0_max);
+    }
+  }
+
+  if (tdhf) {
+    std::cout << "\nCalculating transition amplitudes for <" << Fw.shortSymbol()
+              << "|V|" << Fv.shortSymbol()
+              << ">\n   μ (m_e) "
+                 "         Dv     i0_max     k0_max\n";
+    for (int i = 0; i < mus.size(); ++i) {
+      fmt::print("{:10.4e} {:11.4e} {:11.4e} {:10.1e} {:10.1e}\n", mus[i],
+                 Dvs[i], Dv_TDHFs[i], i0_maxs[i], k0_maxs[i]);
+    }
+  }
+}
+
 void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const bool contact = input.get<bool>("contact", false);
@@ -241,7 +335,7 @@ void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
   //   //   for (auto Fa : wf.core()) {
   //   //     {
   //   //       const auto test_R = Rk_abcd(1, 1, Fn, Fa, Fa, Fv);
-  //   //       const auto test_V = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0001);
+  //   //       const auto test_V = V_nv_direct(false, wf.core(), Fv, Fn, 1.0, 0.0001);
   //   //       if (test_R != 0) {
   //   //         // std::cout << "\n"
   //   //         //           << test_R << " = " << Fn * Vee::bk_bd_v(1, 1, Fa, Fv, Fa)
@@ -274,10 +368,13 @@ void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
 
   for (auto Fn : wf.basis()) {
     if (Fn.twoj() == Fv.twoj()) {
-      const auto V_massless = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0);
-      const auto V_exact_min = V_nv(false, wf.core(), Fv, Fn, 1.0, test_min_mu);
-      const auto V_exact_max = V_nv(false, wf.core(), Fv, Fn, 1.0, test_max_mu);
-      const auto V_contact = V_nv(true, wf.core(), Fv, Fn, 1.0, test_max_mu);
+      const auto V_massless = V_nv_direct(false, wf.core(), Fv, Fn, 1.0, 0.0);
+      const auto V_exact_min =
+          V_nv_direct(false, wf.core(), Fv, Fn, 1.0, test_min_mu);
+      const auto V_exact_max =
+          V_nv_direct(false, wf.core(), Fv, Fn, 1.0, test_max_mu);
+      const auto V_contact =
+          V_nv_direct(true, wf.core(), Fv, Fn, 1.0, test_max_mu);
 
       const auto diff_massless =
           std::abs((V_massless - V_exact_min) / V_massless);
@@ -313,22 +410,7 @@ void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
        log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
     const auto mu = std::exp(log_mu);
-    double Dv = 0;
-
-    for (auto Fn : wf.basis()) {
-      if ((Fn.twoj() == Fv.twoj()) && (Fn != Fv)) {
-        // <v|d|n>
-        const auto d_vn = d_ab(wf.grid(), Fv, Fn);
-
-        // <n|V|v> = Σ_a (u_anav - u_anva)
-        const auto Vsps = V_nv(contact, wf.core(), Fv, Fn, y_sps, mu);
-
-        Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
-      }
-    }
-
-    // Multiply by hbar c
-    Dv *= 1.0 / PhysConst::alpha;
+    double Dv = calc_Dv(type, mu, false, wf);
 
     const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
@@ -336,8 +418,7 @@ void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
     if (tdhf) {
       std::cout << "\nμ = " << mu << "\n";
       double Dv_TDHF = 0;
-      Dv_TDHF = Dv_tdhf(type, mu, wf);
-      Dv_TDHF *= 1.0 / PhysConst::alpha;
+      Dv_TDHF = calc_Dv(type, mu, true, wf);
 
       Dv_TDHFs.push_back(Dv_TDHF);
       Dvs.push_back(Dv);
@@ -361,27 +442,77 @@ void calculate_EDMs(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 }
 
-double Dv_tdhf(const std::string type, const double mu,
+double calc_Dv(const std::string type, const double mu, const bool tdhf,
                const Wavefunction &wf) {
+  const auto Fv = wf.valence()[0];
+  auto Fw(Fv);
+  if (type == "va") {
+    Fw = wf.valence()[1];
+  }
+  return calc_Dv(type, mu, tdhf, wf, Fv, Fw);
+}
+
+double calc_Dv(const std::string type, const double mu, const bool tdhf,
+               const Wavefunction &wf, const DiracSpinor &Fv) {
+  auto Fw(Fv);
+  if (type == "va") {
+    if (wf.valence().size() > 1) {
+      Fw = wf.valence()[1];
+    } else {
+      Fw = wf.core()[wf.core().size() - 1];
+    }
+  }
+  return calc_Dv(type, mu, tdhf, wf, Fv, Fw);
+}
+
+double calc_Dv(const std::string type, const double mu, const bool tdhf,
+               const Wavefunction &wf, const DiracSpinor &Fv,
+               const DiracSpinor &Fw) {
   // std::cout << "In test mode";
 
+  double D_wv = 0.0;
   DiracOperator::Vee VeeOp(wf.core(), mu, type);
-  ExternalField::TDHF tdhf_Vsp(&VeeOp, wf.vHF());
-  tdhf_Vsp.solve_core(0);
-
   DiracOperator::E1 E1(wf.grid());
+
+  ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
   ExternalField::TDHF tdhf_d(&E1, wf.vHF());
-  tdhf_d.solve_core(0);
 
-  const auto Fv = wf.valence()[0];
-
-  double Dv = 0.0;
+  if (tdhf) {
+    tdhf_Vee.solve_core(0);
+    tdhf_d.solve_core(0);
+  }
 
   for (auto Fn : wf.basis()) {
     if (Fn.kappa() == -Fv.kappa()) {
-      // <v|d|n>
-      const auto d_vn = E1.rme3js(Fv.twoj(), Fn.twoj()) *
-                        (E1.reducedME(Fv, Fn) + tdhf_d.dV(Fv, Fn));
+      // Find non-tdhf matrix elements
+      double d_vn = E1.fullME(Fv, Fn);
+      double V_nv = VeeOp.fullME(Fn, Fv);
+
+      double d_wn = d_vn;
+      double V_nw = V_nv;
+
+      if (type == "va") {
+        d_wn = E1.fullME(Fw, Fn);
+        V_nw = VeeOp.fullME(Fn, Fw);
+      }
+
+      if (tdhf) {
+        const auto d_vn_tdhf =
+            E1.rme3js(Fv.twoj(), Fn.twoj()) * tdhf_d.dV(Fv, Fn);
+        const auto V_nv_tdhf =
+            VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_Vee.dV(Fn, Fv);
+
+        d_vn += d_vn_tdhf;
+        V_nv += V_nv_tdhf;
+
+        if (type == "va") {
+          d_wn += E1.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_d.dV(Fw, Fn);
+          V_nv += VeeOp.rme3js(Fn.twoj(), Fw.twoj()) * tdhf_Vee.dV(Fn, Fw);
+        } else {
+          d_wn += d_vn_tdhf;
+          V_nw += V_nv_tdhf;
+        }
+      }
 
       // const auto d_vn = d_ab(wf.grid(), Fv, Fn);
 
@@ -391,16 +522,10 @@ double Dv_tdhf(const std::string type, const double mu,
       // Fn * Vee::V_Fv(wf.core(), Fv, "sp", Fn.kappa(), 1.0, mu);
 
       // Using old implementation:
-      // const auto Vsps = V_nv(false, wf.core(), Fv, Fn, 1, mu);
+      // const auto V_old = V_nv_direct(false, wf.core(), Fv, Fn, 1, mu);
 
       // Using new implementation:
       // const auto Vsps = VeeOp.fullME(Fn, Fv);
-
-      // Using TDHF
-      const auto Vsps = VeeOp.rme3js(Fn.twoj(), Fv.twoj()) *
-                        (VeeOp.reducedME(Fn, Fv) + tdhf_Vsp.dV(Fn, Fv));
-
-      const auto V_old = V_nv(false, wf.core(), Fv, Fn, 1, mu);
 
       /*
       if (Vsps != V_old) {
@@ -412,10 +537,12 @@ double Dv_tdhf(const std::string type, const double mu,
       // This numerically shows that <n|V|v> = <v|V|n>, i.e. V is Hermitian.
       // std::cout << "\n" << VeeOp.fullME(Fv, Fn) << "\t" << VeeOp.fullME(Fn, Fv);
 
-      Dv += 2.0 * d_vn * Vsps / (Fv.en() - Fn.en());
+      D_wv += (d_wn * V_nv / (Fv.en() - Fn.en())) +
+              (d_vn * V_nw / (Fw.en() - Fn.en()));
     }
   }
-  return Dv;
+
+  return D_wv / PhysConst::alpha;
 }
 
 double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb) {
@@ -431,9 +558,9 @@ double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb) {
   */
 }
 
-double V_nv(const bool contact, const std::vector<DiracSpinor> core,
-            const DiracSpinor &Fv, const DiracSpinor &Fn, const double y,
-            const double mu, const bool g0_both) {
+double V_nv_direct(const bool contact, const std::vector<DiracSpinor> core,
+                   const DiracSpinor &Fv, const DiracSpinor &Fn, const double y,
+                   const double mu, const bool g0_both) {
 
   // For safety
   if (Fv.twoj() != Fn.twoj()) {
@@ -868,7 +995,7 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
             << "\t=0?\nR1_abac = " << R1_abac << "\t=0?\nR1_1a1b = " << R1_1a1b
             << "\t=0?\n";
 
-  // V_nv checks
+  // V_nv_direct checks
 
   // Compare contact approximation with large μ
 
@@ -888,10 +1015,13 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   for (auto Fv : wf.valence()) {
     for (auto Fn : wf.basis()) {
       if (Fn.twoj() == Fv.twoj()) {
-        const auto V_massless = V_nv(false, wf.core(), Fv, Fn, 1.0, 0.0);
-        const auto V_exact_min = V_nv(false, wf.core(), Fv, Fn, 1.0, min_mu);
-        const auto V_exact_max = V_nv(false, wf.core(), Fv, Fn, 1.0, max_mu);
-        const auto V_contact = V_nv(true, wf.core(), Fv, Fn, 1.0, max_mu);
+        const auto V_massless = V_nv_direct(false, wf.core(), Fv, Fn, 1.0, 0.0);
+        const auto V_exact_min =
+            V_nv_direct(false, wf.core(), Fv, Fn, 1.0, min_mu);
+        const auto V_exact_max =
+            V_nv_direct(false, wf.core(), Fv, Fn, 1.0, max_mu);
+        const auto V_contact =
+            V_nv_direct(true, wf.core(), Fv, Fn, 1.0, max_mu);
 
         const auto diff_massless =
             std::abs((V_massless - V_exact_min) / V_massless);
@@ -915,14 +1045,15 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
             << ">\n         mu"
                "    massless        full     contact  i0(150μ)  k0(150μ)\n";
 
-  const auto V_v0v1_massless = V_nv(false, wf.core(), Fv0, Fv1, 1.0, 0.0);
+  const auto V_v0v1_massless =
+      V_nv_direct(false, wf.core(), Fv0, Fv1, 1.0, 0.0);
 
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
        log_mu += std::abs(log(max_mu) - log(min_mu)) / 100) {
     const auto mu = exp(log_mu);
-    const auto V_v0v1_contact = V_nv(true, wf.core(), Fv0, Fv1, 1.0, mu);
+    const auto V_v0v1_contact = V_nv_direct(true, wf.core(), Fv0, Fv1, 1.0, mu);
 
-    auto V_v0v1_full = V_nv(false, wf.core(), Fv0, Fv1, 1.0, mu);
+    auto V_v0v1_full = V_nv_direct(false, wf.core(), Fv0, Fv1, 1.0, mu);
 
     const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * 150.0);
     const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * 150.0);
