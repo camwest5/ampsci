@@ -16,6 +16,8 @@ void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
 double dE(const double mu, const std::string int_type,
           const std::vector<DiracSpinor> &core, const DiracSpinor Fv);
 
+void V_energy_shift(const IO::InputBlock &input, const Wavefunction &wf);
+
 void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf);
 
 double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb);

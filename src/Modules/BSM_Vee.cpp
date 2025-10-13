@@ -51,7 +51,7 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   if (int_type == "sp" | int_type == "va") {
     D_matrix_elements(input, wf);
   } else if (int_type == "ss" || int_type == "vv") {
-    ee_isotope_shift(int_type, input, wf);
+    V_energy_shift(input, wf);
   } else {
     std::cout << "\nERROR: 'type = " << int_type
               << " is not valid. Ensure one of \n - 'sp' "
@@ -186,6 +186,114 @@ double dE(const double mu, const std::string int_type,
   return dE_val;
 }
 
+void V_energy_shift(const IO::InputBlock &input, const Wavefunction &wf) {
+
+  const bool contact = input.get<bool>("contact", false);
+  const double min_mu = input.get<double>("min_mu", 1.0e-4);
+  const double max_mu = input.get<double>("max_mu", 1.0e4);
+  const double N_mu = input.get<double>("N_mu", 100.0);
+  const bool g0_both = input.get<bool>("g0", true);
+  const bool tdhf = input.get<bool>("tdhf", false);
+  const std::string type = input.get<std::string>("type", "");
+  const bool test = input.get<bool>("test", false);
+
+  // if (input.get<bool>("test", false) == true) {
+  //   sps_testing(wf, contact);
+  //   return;
+  // }
+
+  int i_ground = 0;
+  double E_ground = wf.valence()[0].en();
+
+  // Find the ground state of the given valence states
+  for (int i = 1; i < wf.valence().size(); ++i) {
+    const double E_test = wf.valence()[i].en();
+
+    if (E_test < E_ground) {
+      E_ground = E_test;
+      i_ground = i;
+    }
+  }
+
+  const auto n_ground = wf.valence()[i_ground].n();
+  const auto kappa_ground = wf.valence()[i_ground].kappa();
+
+  const int v_n = input.get<int>("n", n_ground);
+  const int v_kappa = input.get<int>("kappa", kappa_ground);
+
+  const auto Fv = *wf.getState(v_n, v_kappa);
+
+  const double y_sps = 1;
+
+  std::vector<double> V_vv_TDHFs;
+  std::vector<double> V_vvs;
+  std::vector<double> i0_maxs;
+  std::vector<double> k0_maxs;
+  std::vector<double> mus;
+
+  if (tdhf) {
+    std::cout << "\nRunning TDHF for Vee_" << type << ".\n";
+
+  } else {
+    std::cout << "\nCalculating <" << Fv.symbol() << "|V|" << Fv.symbol()
+              << "> with " << type
+              << " interaction (mediator mass = μ).\n   μ (m_e) "
+                 "          V     i0_max     k0_max\n";
+  }
+
+  // Currently looks at one valence state - ground
+  for (double log_mu = log(min_mu); log_mu < log(max_mu);
+       log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
+
+    const auto mu = std::exp(log_mu);
+
+    DiracOperator::Vee VeeOp(wf.core(), mu, "sp");
+    ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
+
+    if (tdhf) {
+      tdhf_Vee.solve_core(0);
+    }
+
+    // Find non-tdhf matrix elements
+    double V_vv = VeeOp.fullME(Fv, Fv);
+    double V_vv_tdhf = V_vv;
+
+    if (tdhf) {
+      V_vv_tdhf += VeeOp.rme3js(Fv.twoj(), Fv.twoj()) * tdhf_Vee.dV(Fv, Fv);
+      V_vv_tdhf *= 1.0 / PhysConst::alpha;
+    }
+
+    V_vv *= 1.0 / PhysConst::alpha;
+
+    const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
+    const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
+
+    if (tdhf) {
+      std::cout << "\nμ = " << mu << "\n";
+
+      V_vv_TDHFs.push_back(V_vv_tdhf);
+      V_vvs.push_back(V_vv);
+      i0_maxs.push_back(i0_max);
+      k0_maxs.push_back(k0_max);
+      mus.push_back(mu);
+    } else {
+      fmt::print("{:10.4e} {:11.4e} {:10.1e} {:10.1e}\n", mu, V_vv, i0_max,
+                 k0_max);
+    }
+  }
+
+  if (tdhf) {
+    std::cout << "\nCalculating <" << Fv.symbol() << "|V|" << Fv.symbol()
+              << "> with " << type
+              << " interaction (mediator mass = μ).\n   μ (m_e) "
+                 "          V     i0_max     k0_max\n";
+    for (int i = 0; i < mus.size(); ++i) {
+      fmt::print("{:10.4e} {:11.4e} {:11.4e} {:10.1e} {:10.1e}\n", mus[i],
+                 V_vvs[i], V_vv_TDHFs[i], i0_maxs[i], k0_maxs[i]);
+    }
+  }
+}
+
 void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const bool contact = input.get<bool>("contact", false);
@@ -277,7 +385,7 @@ void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
     std::cout << "\nRunning TDHF for Vee_" << type << ".\n";
 
   } else {
-    std::cout << "\nCalculating <" << Fw.symbol() << "|V|" << Fv.symbol()
+    std::cout << "\nCalculating <" << Fw.symbol() << "|D|" << Fv.symbol()
               << "> with " << type
               << " interaction (mediator mass = μ).\n   μ (m_e) "
                  "         Dv     i0_max     k0_max\n";
