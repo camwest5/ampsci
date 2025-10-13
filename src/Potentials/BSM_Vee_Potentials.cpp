@@ -10,10 +10,11 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
                  const std::string type, const int kappa_n, const double y,
                  const double mu) {
   if ((type != "sp") && (type != "va")) {
-    throw std::bad_function_call();
+    std::cout << "\n\n*****ONLY type = sp or type = va SUPPORTED*****";
+    return 0.0 * Fv;
   }
 
-  // For safety
+  // For safety - otherwise the angular intergrals wrong below!
   if (Fv.kappa() != -kappa_n) {
     return 0.0 * Fv;
   }
@@ -78,6 +79,9 @@ DiracSpinor Bk_ac_v(const int k, const double mu, const std::string type,
     mod_Fv = i_g0_g5(Fv);
   } else if (type == "va") {
     mod_Fv = -1.0 * ig5(Fv);
+  } else if (type == "ss") {
+    mod_Fc = g0(Fc);
+    mod_Fv = g0(Fv);
   }
 
   // Integrate
@@ -134,6 +138,9 @@ DiracSpinor bk_bd_v(const int k, const double mu, const std::string type,
     mod_Fv = g0(Fv);
   } else if (type == "va") {
     mod_Fd = -1.0 * ig5(Fd);
+  } else if (type == "ss") {
+    mod_Fd = g0(Fd);
+    mod_Fv = g0(Fd);
   }
 
   // Integrate
