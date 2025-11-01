@@ -58,6 +58,30 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
                  "(scalar-pseudoscalar)\n - 'ss' (scalar-scalar)\n - 'vv' "
                  "(vector-vector)\n is provided.";
   }
+
+  // // Additional, temp testing stuff - note, v = kappa_v, a = kappa_a and l = lambda
+  // for (double v = -10; v < 10; ++v) {
+  //   const auto jv = std::abs(v) - 0.5;
+  //   for (double a = -10; a < 10; ++a) {
+  //     const auto ja = std::abs(a) - 0.5;
+
+  //     for (double l = std::abs(ja - jv); l <= ja + jv; ++l) {
+  //       if ((int(ja + jv + l) % 2) == 0) {
+
+  //         const auto vaav = Angular::Ck_kk(l, -v, a) * Angular::Ck_kk(l, a, -v);
+  //         const auto avva = Angular::Ck_kk(l, a, v) * Angular::Ck_kk(l, -v, -a);
+
+  //         if ((vaav != 0) || (avva != 0)) {
+  //           std::cout << "\n"
+  //                     << v << " " << a << " " << l << "\t" << vaav << "\t"
+  //                     << avva;
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
+
+  // Cleanup
   gsl_set_error_handler(e_handler);
 }
 
@@ -331,7 +355,7 @@ void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
 
   // const auto Fv = *wf.getState(v_n, v_kappa);
   const auto Fv = wf.valence()[0];
-  const auto Fw = wf.valence()[1];
+  const auto Fw = Fv;
 
   const double y_sps = 1;
 
@@ -396,7 +420,7 @@ void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
        log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
     const auto mu = std::exp(log_mu);
-    double Dv = calc_Dv(type, mu, false, wf, Fv, Fv);
+    double Dv = calc_Dv(type, mu, false, wf, Fv, Fw);
 
     const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
     const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
@@ -404,7 +428,7 @@ void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
     if (tdhf) {
       std::cout << "\nμ = " << mu << "\n";
       double Dv_TDHF = 0;
-      Dv_TDHF = calc_Dv(type, mu, true, wf, Fv, Fv);
+      Dv_TDHF = calc_Dv(type, mu, true, wf, Fv, Fw);
 
       Dv_TDHFs.push_back(Dv_TDHF);
       Dvs.push_back(Dv);
