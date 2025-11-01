@@ -508,20 +508,21 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
         V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_Vee.dV(Fn, Fv);
       }
 
-      D_wv += (d_wn * V_nv) / (Fv.en() - Fn.en());
-
-      if (Fw == Fn) {
+      if (Fv == Fw) {
+        D_wv += 2.0 * (d_wn * V_nv) / (Fv.en() - Fn.en());
+      } else {
         D_wv += (d_wn * V_nv) / (Fv.en() - Fn.en());
       }
     }
 
-    if (Fw != Fn && Fw.kappa() == -Fv.kappa()) {
-      // Find non-tdhf matrix elements
+    if (Fv != Fw && Fn.kappa() == -Fw.kappa()) {
+
       double V_wn = VeeOp.fullME(Fw, Fn);
       double d_nv = E1.fullME(Fn, Fv);
 
       if (tdhf) {
-        V_wn += VeeOp.rme3js(Fn.twoj(), Fw.twoj()) * tdhf_Vee.dV(Fw, Fn);
+
+        V_wn += VeeOp.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_Vee.dV(Fw, Fn);
         d_nv += E1.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_d.dV(Fn, Fv);
       }
 
