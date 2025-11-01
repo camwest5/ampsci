@@ -644,7 +644,7 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
 
   const auto g_Fc = int_type == "vv" ? Fc : g0_both ? BSM_Vee::g0(Fc) : Fc;
 
-  const auto g_Fd = int_type == "sp" ? BSM_Vee::i_g0_g5(Fd) :
+  const auto g_Fd = int_type == "sp" ? BSM_Vee::old_i_g0_g5(Fd) :
                     int_type == "ss" ? BSM_Vee::g0(Fd) :
                                        Fd;
 
@@ -668,7 +668,7 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
   const auto &gr = Fa.grid();
   const auto &r = gr.r();
   const auto g0_Fc = BSM_Vee::g0(Fc);
-  const auto ig0g5_Fd = BSM_Vee::i_g0_g5(Fd);
+  const auto ig0g5_Fd = BSM_Vee::old_i_g0_g5(Fd);
 
   // Delta case
 
@@ -768,7 +768,7 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
                         const DiracSpinor &Fb, const DiracSpinor &Fc,
                         const DiracSpinor &Fd) {
-  const auto screening_function = Coulomb::yk_ab(k, Fb, BSM_Vee::i_g0_g5(Fd));
+  const auto screening_function = Coulomb::yk_ab(k, Fb, BSM_Vee::old_i_g0_g5(Fd));
 
   const auto g0_Fc = BSM_Vee::g0(Fc);
 
@@ -939,8 +939,8 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // Need another special function
 
   // R_(γ5*1)a1a = R_(γ5*a)1a1 = 1
-  const auto R_g1a1a = R_abcd_contact(1.0, BSM_Vee::i_g0_g5(Fr), Fv0, Fr, Fv0);
-  const auto R_ga1a1 = R_abcd_contact(1.0, BSM_Vee::i_g0_g5(Fv0), Fr, Fv0, Fr);
+  const auto R_g1a1a = R_abcd_contact(1.0, BSM_Vee::old_i_g0_g5(Fr), Fv0, Fr, Fv0);
+  const auto R_ga1a1 = R_abcd_contact(1.0, BSM_Vee::old_i_g0_g5(Fv0), Fr, Fv0, Fr);
 
   std::cout << "\nRadial contact approximation checks\nR_aaaa = " << R_aaaa
             << "\t=0?\nR_abab = " << R_abab << "\t=0?\nR_abac = " << R_abac
@@ -980,7 +980,7 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // With (-fagc + fcga) = (fbfd + gbgd) = 1, should have
   // R0_(γ1)111 = \int_0^inf B0_bd
 
-  const auto R0_g1111 = Rk_abcd(0.0, 1.0, BSM_Vee::i_g0_g5(F1), F1, F1, F1);
+  const auto R0_g1111 = Rk_abcd(0.0, 1.0, BSM_Vee::old_i_g0_g5(F1), F1, F1, F1);
   const auto R0_g1111_manual =
       NumCalc::integrate(1.0, 0.0, wf.grid().size(), B0_11, wf.grid().drdu()) *
       wf.grid().du();

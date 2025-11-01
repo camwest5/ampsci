@@ -126,65 +126,6 @@ DiracSpinor Bk_ab_v(const int k, const double mu, const bool betaalpha,
   return result * mod_Fv;
 }
 
-DiracSpinor bk_bd_v(const int k, const double mu, const std::string type,
-                    const DiracSpinor &Fb, const DiracSpinor &Fd,
-                    const DiracSpinor &Fv) {
-  const auto &gr = Fb.grid();
-  const auto &r = gr.r();
-
-  // Modified spherical Bessel functions
-  std::vector<double> i_k(gr.size());
-  std::vector<double> k_k(gr.size());
-
-  for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
-    const auto x = mu * r[i_gr];
-    i_k[i_gr] = mod_sph_bessel_i(k, x);
-    k_k[i_gr] = mod_sph_bessel_k(k, x);
-  }
-
-  auto mod_Fd = Fd;
-  auto mod_Fv = Fv;
-
-  if (type == "sp") {
-    mod_Fd = i_g0_g5(Fd);
-    mod_Fv = g0(Fv);
-  } else if (type == "va") {
-    mod_Fd = -1.0 * ig5(Fd);
-  } else if (type == "ss") {
-    mod_Fd = g0(Fd);
-    mod_Fv = g0(Fd);
-  }
-
-  // Integrate
-  std::vector<double> result(gr.size());
-
-  for (int i_mid = 0; i_mid < gr.size(); ++i_mid) {
-    double lower_ff =
-        NumCalc::integrate(1.0, 0, i_mid, i_k, Fb.f(), mod_Fd.f(), gr.drdu());
-
-    double lower_gg =
-        NumCalc::integrate(1.0, 0, i_mid, i_k, Fb.g(), mod_Fd.g(), gr.drdu());
-
-    // For r0 point
-    if (i_mid == 0) {
-      lower_ff = 0;
-      lower_gg = 0;
-    }
-
-    const double upper_ff = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
-                                               Fb.f(), mod_Fd.f(), gr.drdu());
-
-    const double upper_gg = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
-                                               Fb.g(), mod_Fd.g(), gr.drdu());
-
-    result[i_mid] = (k_k[i_mid] * (lower_ff + lower_gg) +
-                     i_k[i_mid] * (upper_ff + upper_gg)) *
-                    gr.du();
-  }
-
-  return result * mod_Fv;
-}
-
 DiracSpinor g0(const DiracSpinor &Fa) {
   DiracSpinor Fb(Fa);
   Fb.g() = (-1.0 * Fa).g();
@@ -198,14 +139,14 @@ DiracSpinor g5(const DiracSpinor &Fa) {
   return Fb;
 }
 
-DiracSpinor ig5(const DiracSpinor &Fa) {
+DiracSpinor old_ig5(const DiracSpinor &Fa) {
   DiracSpinor Fb(Fa);
   Fb.f() = (-1.0 * Fa).g();
   Fb.g() = Fa.f();
   return Fb;
 }
 
-DiracSpinor i_g0_g5(const DiracSpinor &Fa) {
+DiracSpinor old_i_g0_g5(const DiracSpinor &Fa) {
   // Fb = i*γ5*γ0*Fa
 
   DiracSpinor Fb(Fa);
