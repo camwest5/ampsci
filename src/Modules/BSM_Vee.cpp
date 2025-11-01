@@ -520,7 +520,7 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
       }
     }
 
-    if (Fv != Fw && Fv != Fn) {
+    if (Fv != Fw && Fw != Fn) {
 
       double V_wn = VeeOp.fullME(Fw, Fn);
       double d_nv = E1.fullME(Fn, Fv);
