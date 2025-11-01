@@ -9,17 +9,18 @@ namespace BSM_Vee {
 DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
                  const std::string type, const int kappa_n, const double y,
                  const double mu) {
-  if ((type != "sp") && (type != "va")) {
-    std::cout << "\n\n*****ONLY type = sp or type = va SUPPORTED*****";
+  if ((type != "sp") && (type != "va") && (type != "ss") && (type != "vv")) {
+    std::cout << "\n\n*****ONLY type = sp, va, ss or vv SUPPORTED*****";
     return 0.0 * Fv;
   }
 
   // For safety - otherwise the angular intergrals wrong below!...really?
-  if (Fv.kappa() != -kappa_n) {
-    return 0.0 * Fv;
-  }
+  // if (Fv.kappa() != -kappa_n) {
+  //   return 0.0 * Fv;
+  // }
 
   DiracSpinor VFv(Fv.n(), Fv.kappa(), Fv.grid_sptr());
+  const double kappa_d_sign = ((type == "ss") || (type == "vv")) ? 1.0 : -1.0;
 
   for (auto Fa : core) {
 
@@ -33,13 +34,15 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
         const int k = twok / 2;
         const int twokp1 = twok + 1;
 
-        const auto Fexch_1 = Angular::Ck_kk(k, kappa_n, Fa.kappa()) *
-                             Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa()) *
-                             Bk_ab_v(k, mu, false, type, Fa, Fv, Fa);
+        const auto Fexch_1 =
+            Angular::Ck_kk(k, kappa_n, Fa.kappa()) *
+            Angular::Ck_kk(k, Fa.kappa(), kappa_d_sign * Fv.kappa()) *
+            Bk_ab_v(k, mu, false, type, Fa, Fv, Fa);
 
-        const auto Fexch_2 = Angular::Ck_kk(k, Fa.kappa(), Fv.kappa()) *
-                             Angular::Ck_kk(k, kappa_n, -Fa.kappa()) *
-                             Bk_ab_v(k, mu, true, type, Fa, Fv, Fa);
+        const auto Fexch_2 =
+            Angular::Ck_kk(k, Fa.kappa(), Fv.kappa()) *
+            Angular::Ck_kk(k, kappa_n, kappa_d_sign * Fa.kappa()) *
+            Bk_ab_v(k, mu, true, type, Fa, Fv, Fa);
 
         Fexch += twokp1 * (Fexch_1 + Fexch_2);
       }

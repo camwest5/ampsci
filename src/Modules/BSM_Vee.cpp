@@ -51,7 +51,8 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   if (int_type == "sp" | int_type == "va") {
     D_matrix_elements(input, wf);
   } else if (int_type == "ss" || int_type == "vv") {
-    V_energy_shift(input, wf);
+    // V_energy_shift(input, wf);
+    D_matrix_elements(input, wf); // for now, testing
   } else {
     std::cout << "\nERROR: 'type = " << int_type
               << " is not valid. Ensure one of \n - 'sp' "
@@ -355,7 +356,11 @@ void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
 
   // const auto Fv = *wf.getState(v_n, v_kappa);
   const auto Fv = wf.valence()[0];
-  const auto Fw = Fv;
+  auto Fw = Fv;
+
+  if (type == "va") {
+    auto Fw = wf.valence()[1];
+  }
 
   const double y_sps = 1;
 
@@ -498,7 +503,7 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
   }
 
   for (auto Fn : wf.basis()) {
-    if (Fn.kappa() == -Fv.kappa()) {
+    if (Fv != Fn) {
       // Find non-tdhf matrix elements
       double d_wn = E1.fullME(Fw, Fn);
       double V_nv = VeeOp.fullME(Fn, Fv);
@@ -515,7 +520,7 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
       }
     }
 
-    if (Fv != Fw && Fn.kappa() == -Fw.kappa()) {
+    if (Fv != Fw && Fv != Fn) {
 
       double V_wn = VeeOp.fullME(Fw, Fn);
       double d_nv = E1.fullME(Fn, Fv);
@@ -768,7 +773,8 @@ double R_abcd_contact(const double mu, const DiracSpinor &Fa,
 double Rk_abcd_massless(const double k, const DiracSpinor &Fa,
                         const DiracSpinor &Fb, const DiracSpinor &Fc,
                         const DiracSpinor &Fd) {
-  const auto screening_function = Coulomb::yk_ab(k, Fb, BSM_Vee::old_i_g0_g5(Fd));
+  const auto screening_function =
+      Coulomb::yk_ab(k, Fb, BSM_Vee::old_i_g0_g5(Fd));
 
   const auto g0_Fc = BSM_Vee::g0(Fc);
 
@@ -939,8 +945,10 @@ void sps_testing(const Wavefunction &wf, const bool contact) {
   // Need another special function
 
   // R_(γ5*1)a1a = R_(γ5*a)1a1 = 1
-  const auto R_g1a1a = R_abcd_contact(1.0, BSM_Vee::old_i_g0_g5(Fr), Fv0, Fr, Fv0);
-  const auto R_ga1a1 = R_abcd_contact(1.0, BSM_Vee::old_i_g0_g5(Fv0), Fr, Fv0, Fr);
+  const auto R_g1a1a =
+      R_abcd_contact(1.0, BSM_Vee::old_i_g0_g5(Fr), Fv0, Fr, Fv0);
+  const auto R_ga1a1 =
+      R_abcd_contact(1.0, BSM_Vee::old_i_g0_g5(Fv0), Fr, Fv0, Fr);
 
   std::cout << "\nRadial contact approximation checks\nR_aaaa = " << R_aaaa
             << "\t=0?\nR_abab = " << R_abab << "\t=0?\nR_abac = " << R_abac
