@@ -500,61 +500,57 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
   for (auto Fn : wf.basis()) {
     if (Fn.kappa() == -Fv.kappa()) {
       // Find non-tdhf matrix elements
-      double d_vn = E1.fullME(Fv, Fn);
+      double d_wn = E1.fullME(Fw, Fn);
       double V_nv = VeeOp.fullME(Fn, Fv);
 
-      double d_wn = d_vn;
-      double V_nw = V_nv;
-
-      if (type == "va") {
-        d_wn = E1.fullME(Fw, Fn);
-        V_nw = VeeOp.fullME(Fn, Fw);
+      if (tdhf) {
+        d_wn += E1.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_d.dV(Fw, Fn);
+        V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_Vee.dV(Fn, Fv);
       }
+
+      if (Fv == Fw) {
+        D_wv += 2.0 * (d_wn * V_nv) / (Fv.en() - Fn.en());
+      } else {
+        D_wv += (d_wn * V_nv) / (Fv.en() - Fn.en());
+      }
+    }
+
+    if (Fv != Fw && Fn.kappa() == -Fw.kappa()) {
+
+      double V_wn = VeeOp.fullME(Fw, Fn);
+      double d_nv = E1.fullME(Fn, Fv);
 
       if (tdhf) {
-        const auto d_vn_tdhf =
-            E1.rme3js(Fv.twoj(), Fn.twoj()) * tdhf_d.dV(Fv, Fn);
-        const auto V_nv_tdhf =
-            VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_Vee.dV(Fn, Fv);
 
-        d_vn += d_vn_tdhf;
-        V_nv += V_nv_tdhf;
-
-        if (type == "va") {
-          d_wn += E1.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_d.dV(Fw, Fn);
-          V_nv += VeeOp.rme3js(Fn.twoj(), Fw.twoj()) * tdhf_Vee.dV(Fn, Fw);
-        } else {
-          d_wn += d_vn_tdhf;
-          V_nw += V_nv_tdhf;
-        }
+        V_wn += VeeOp.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_Vee.dV(Fw, Fn);
+        d_nv += E1.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_d.dV(Fn, Fv);
       }
 
-      // const auto d_vn = d_ab(wf.grid(), Fv, Fn);
+      D_wv += (V_wn * d_nv) / (Fw.en() - Fn.en());
+    }
 
-      // <n|V|v>
+    // const auto d_nv = d_ab(wf.grid(), Fv, Fn);
 
-      // const auto Vsps =
-      // Fn * Vee::V_Fv(wf.core(), Fv, "sp", Fn.kappa(), 1.0, mu);
+    // <n|V|v>
 
-      // Using old implementation:
-      // const auto V_old = V_nv_direct(false, wf.core(), Fv, Fn, 1, mu);
+    // const auto Vsps =
+    // Fn * Vee::V_Fv(wf.core(), Fv, "sp", Fn.kappa(), 1.0, mu);
 
-      // Using new implementation:
-      // const auto Vsps = VeeOp.fullME(Fn, Fv);
+    // Using old implementation:
+    // const auto V_old = V_nv_direct(false, wf.core(), Fv, Fn, 1, mu);
 
-      /*
+    // Using new implementation:
+    // const auto Vsps = VeeOp.fullME(Fn, Fv);
+
+    /*
       if (Vsps != V_old) {
         std::cout << "\n"
                   << Fn.symbol() << "\t" << V_old << "\t" << Vsps - V_old;
       }
       */
 
-      // This numerically shows that <n|V|v> = <v|V|n>, i.e. V is Hermitian.
-      // std::cout << "\n" << VeeOp.fullME(Fv, Fn) << "\t" << VeeOp.fullME(Fn, Fv);
-
-      D_wv += (d_wn * V_nv / (Fv.en() - Fn.en())) +
-              (d_vn * V_nw / (Fw.en() - Fn.en()));
-    }
+    // This numerically shows that <n|V|v> = <v|V|n>, i.e. V is Hermitian.
+    // std::cout << "\n" << VeeOp.fullME(Fv, Fn) << "\t" << VeeOp.fullME(Fn, Fv);
   }
 
   return D_wv / PhysConst::alpha;
