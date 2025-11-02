@@ -490,8 +490,6 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
                const DiracSpinor &Fw) {
   // std::cout << "In test mode";
 
-  const double relative_kappa = ((type == "ss") || (type == "vv")) ? 1.0 : -1.0;
-
   double D_wv = 0.0;
   DiracOperator::Vee VeeOp(wf.core(), mu, type);
   DiracOperator::E1 E1(wf.grid());
@@ -505,7 +503,7 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
   }
 
   for (auto Fn : wf.basis()) {
-    if (Fn.kappa() == relative_kappa * Fv.kappa()) {
+    if (Fn != Fv) {
       // Find non-tdhf matrix elements
       double d_wn = E1.fullME(Fw, Fn);
       double V_nv = VeeOp.fullME(Fn, Fv);
@@ -522,7 +520,7 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
       }
     }
 
-    if (Fv != Fw && Fn.kappa() == relative_kappa * Fw.kappa()) {
+    if (Fv != Fw && Fn != Fw) {
 
       double V_wn = VeeOp.fullME(Fw, Fn);
       double d_nv = E1.fullME(Fn, Fv);

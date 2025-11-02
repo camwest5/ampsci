@@ -20,9 +20,17 @@ public:
   double angularF(const int ka, const int kb) const override final {
 
     // Check this!
-    return 1.0 / Angular::threej_2(Angular::twoj_k(ka), 0, Angular::twoj_k(kb),
-                                   -1, 0, 1);
+    const double A = Angular::threej_2(Angular::twoj_k(ka), 0,
+                                       Angular::twoj_k(kb), -1, 0, 1);
+
+    if (Angular::zeroQ(A)) {
+      return 0.0;
+    } else {
+      return 1.0 / Angular::threej_2(Angular::twoj_k(ka), 0,
+                                     Angular::twoj_k(kb), -1, 0, 1);
+    }
   }
+
   std::string name() const override { return std::string("V_SP"); }
 
   DiracSpinor radial_rhs(const int kappa_a,

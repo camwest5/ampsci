@@ -14,13 +14,12 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
     return 0.0 * Fv;
   }
 
-  // For safety - otherwise the angular intergrals wrong below!...really?
-  // if (Fv.kappa() != -kappa_n) {
-  //   return 0.0 * Fv;
-  // }
-
   DiracSpinor VFv(Fv.n(), Fv.kappa(), Fv.grid_sptr());
   const double kappa_d_sign = ((type == "ss") || (type == "vv")) ? 1.0 : -1.0;
+
+  if (kappa_n != kappa_d_sign * Fv.kappa()) {
+    return 0.0 * Fv;
+  }
 
   for (auto Fa : core) {
 
