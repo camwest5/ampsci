@@ -4,13 +4,13 @@
 
 namespace Module {
 void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf);
-double calc_Dv(const std::string type, const double mu, const bool tdhf,
-               const Wavefunction &wf, const DiracSpinor &Fv,
+double calc_Dv(const std::string type, const bool contact, const double mu,
+               const bool tdhf, const Wavefunction &wf, const DiracSpinor &Fv,
                const DiracSpinor &Fw);
-double calc_Dv(const std::string type, const double mu, const bool tdhf,
-               const Wavefunction &wf, const DiracSpinor &Fv);
-double calc_Dv(const std::string type, const double mu, const bool tdhf,
-               const Wavefunction &wf);
+double calc_Dv(const std::string type, const bool contact, const double mu,
+               const bool tdhf, const Wavefunction &wf, const DiracSpinor &Fv);
+double calc_Dv(const std::string type, const bool contact, const double mu,
+               const bool tdhf, const Wavefunction &wf);
 void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
                       const Wavefunction &wf);
 double dE(const double mu, const std::string int_type,
@@ -19,6 +19,8 @@ double dE(const double mu, const std::string int_type,
 void V_energy_shift(const IO::InputBlock &input, const Wavefunction &wf);
 
 void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf);
+
+// ############## OLD FUNCTIONS #################
 
 double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb);
 double V_nv_direct(const bool contact, const std::vector<DiracSpinor> core,

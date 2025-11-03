@@ -8,7 +8,7 @@ namespace BSM_Vee {
 
 DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
                  const std::string type, const int kappa_n, const double y,
-                 const double mu) {
+                 const bool contact, const double mu) {
   if ((type != "sp") && (type != "va") && (type != "ss") && (type != "vv")) {
     std::cout << "\n\n*****ONLY type = sp, va, ss or vv SUPPORTED*****";
     return 0.0 * Fv;
@@ -23,7 +23,8 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
 
   for (auto Fa : core) {
 
-    const auto Fdir = Fa.twojp1() * Bk_ab_v(0, mu, true, type, Fa, Fa, Fv);
+    const auto Fdir =
+        Fa.twojp1() * Bk_ab_v(0, contact, mu, true, type, Fa, Fa, Fv);
 
     DiracSpinor Fexch(Fa.n(), Fa.kappa(), Fa.grid_sptr());
 
@@ -36,12 +37,12 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
         const auto Fexch_1 =
             Angular::Ck_kk(k, kappa_n, Fa.kappa()) *
             Angular::Ck_kk(k, Fa.kappa(), kappa_d_sign * Fv.kappa()) *
-            Bk_ab_v(k, mu, false, type, Fa, Fv, Fa);
+            Bk_ab_v(k, contact, mu, false, type, Fa, Fv, Fa);
 
         const auto Fexch_2 =
             Angular::Ck_kk(k, Fa.kappa(), Fv.kappa()) *
             Angular::Ck_kk(k, kappa_n, kappa_d_sign * Fa.kappa()) *
-            Bk_ab_v(k, mu, true, type, Fa, Fv, Fa);
+            Bk_ab_v(k, contact, mu, true, type, Fa, Fv, Fa);
 
         Fexch += twokp1 * (Fexch_1 + Fexch_2);
       }
@@ -54,24 +55,25 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
     VFv += Fdir - Fexch;
   }
 
-  return mu * y * VFv;
+  double mu_factor;
+
+  if (contact == true) {
+    mu_factor = 1.0 / (mu * mu);
+  } else if (mu == 0) {
+    mu_factor = 1.0;
+  } else {
+    mu_factor = mu;
+  }
+
+  return mu_factor * y * VFv;
 }
 
-DiracSpinor Bk_ab_v(const int k, const double mu, const bool betaalpha,
-                    const std::string type, const DiracSpinor &Fa,
-                    const DiracSpinor &Fb, const DiracSpinor &Fv) {
+DiracSpinor Bk_ab_v(const int k, const bool contact, const double mu,
+                    const bool betaalpha, const std::string type,
+                    const DiracSpinor &Fa, const DiracSpinor &Fb,
+                    const DiracSpinor &Fv) {
   const auto &gr = Fa.grid();
   const auto &r = gr.r();
-
-  // Modified spherical Bessel functions
-  std::vector<double> i_k(gr.size());
-  std::vector<double> k_k(gr.size());
-
-  for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
-    const auto x = mu * r[i_gr];
-    i_k[i_gr] = mod_sph_bessel_i(k, x);
-    k_k[i_gr] = mod_sph_bessel_k(k, x);
-  }
 
   auto mod_Fb = Fb;
   auto mod_Fv = Fv;
@@ -98,34 +100,56 @@ DiracSpinor Bk_ab_v(const int k, const double mu, const bool betaalpha,
     }
   }
 
-  // Integrate
-  std::vector<double> result(gr.size());
+  if (contact == true) {
+    std::vector<double> FaFb_rrk(gr.size());
+    for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
+      FaFb_rrk[i_gr] =
+          (Fa.f(i_gr) * mod_Fb.f(i_gr) + Fa.g(i_gr) * mod_Fb.g(i_gr)) /
+          (gr.r(i_gr) * gr.r(i_gr) * (2 * k + 1));
+    }
+    return FaFb_rrk * mod_Fv;
+  } else if (mu == 0) {
+    return Coulomb::yk_ab(k, Fa, mod_Fb) * mod_Fv * (1.0 / (2.0 * k + 1));
+  } else {
+    // Modified spherical Bessel functions
+    std::vector<double> i_k(gr.size());
+    std::vector<double> k_k(gr.size());
 
-  for (int i_mid = 0; i_mid < gr.size(); ++i_mid) {
-    double lower_ff =
-        NumCalc::integrate(1.0, 0, i_mid, i_k, Fa.f(), mod_Fb.f(), gr.drdu());
-
-    double lower_gg =
-        NumCalc::integrate(1.0, 0, i_mid, i_k, Fa.g(), mod_Fb.g(), gr.drdu());
-
-    // For r0 point
-    if (i_mid == 0) {
-      lower_ff = 0;
-      lower_gg = 0;
+    for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
+      const auto x = mu * r[i_gr];
+      i_k[i_gr] = mod_sph_bessel_i(k, x);
+      k_k[i_gr] = mod_sph_bessel_k(k, x);
     }
 
-    const double upper_ff = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
-                                               Fa.f(), mod_Fb.f(), gr.drdu());
+    // Integrate
+    std::vector<double> result(gr.size());
 
-    const double upper_gg = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
-                                               Fa.g(), mod_Fb.g(), gr.drdu());
+    for (int i_mid = 0; i_mid < gr.size(); ++i_mid) {
+      double lower_ff =
+          NumCalc::integrate(1.0, 0, i_mid, i_k, Fa.f(), mod_Fb.f(), gr.drdu());
 
-    result[i_mid] = (k_k[i_mid] * (lower_ff + lower_gg) +
-                     i_k[i_mid] * (upper_ff + upper_gg)) *
-                    gr.du();
+      double lower_gg =
+          NumCalc::integrate(1.0, 0, i_mid, i_k, Fa.g(), mod_Fb.g(), gr.drdu());
+
+      // For r0 point
+      if (i_mid == 0) {
+        lower_ff = 0;
+        lower_gg = 0;
+      }
+
+      const double upper_ff = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
+                                                 Fa.f(), mod_Fb.f(), gr.drdu());
+
+      const double upper_gg = NumCalc::integrate(1.0, i_mid, gr.size(), k_k,
+                                                 Fa.g(), mod_Fb.g(), gr.drdu());
+
+      result[i_mid] = (k_k[i_mid] * (lower_ff + lower_gg) +
+                       i_k[i_mid] * (upper_ff + upper_gg)) *
+                      gr.du();
+    }
+
+    return result * mod_Fv;
   }
-
-  return result * mod_Fv;
 }
 
 DiracSpinor g0(const DiracSpinor &Fa) {

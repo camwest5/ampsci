@@ -7,10 +7,11 @@
 namespace BSM_Vee {
 DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
                  const std::string type, const int kappa_n, const double y,
-                 const double mu);
-DiracSpinor Bk_ab_v(const int k, const double mu, const bool betaalpha,
-                    const std::string type, const DiracSpinor &Fa,
-                    const DiracSpinor &Fc, const DiracSpinor &Fv);
+                 const bool contact, const double mu);
+DiracSpinor Bk_ab_v(const int k, const bool contact, const double mu,
+                    const bool betaalpha, const std::string type,
+                    const DiracSpinor &Fa, const DiracSpinor &Fc,
+                    const DiracSpinor &Fv);
 
 DiracSpinor g0(const DiracSpinor &Fa);
 DiracSpinor g5(const DiracSpinor &Fa);

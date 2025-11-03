@@ -11,10 +11,11 @@ namespace DiracOperator {
 
 class Vee : public TensorOperator {
 public:
-  Vee(const std::vector<DiracSpinor> &core_in, const double mu_in,
-      const std::string type)
+  Vee(const std::vector<DiracSpinor> &core_in, const bool contact,
+      const double mu_in, const std::string type)
       : TensorOperator(0, Parity::odd),
         m_core(core_in),
+        m_contact(contact),
         m_mu(mu_in),
         m_type(type) {}
   double angularF(const int ka, const int kb) const override final {
@@ -38,7 +39,7 @@ public:
 
     const double gghc = 1.0;
 
-    return BSM_Vee::V_Fv(m_core, Fb, m_type, kappa_a, gghc, m_mu);
+    return BSM_Vee::V_Fv(m_core, Fb, m_type, kappa_a, gghc, m_contact, m_mu);
   }
 
   double radialIntegral(const DiracSpinor &Fa,
@@ -48,6 +49,7 @@ public:
 
 private:
   const std::vector<DiracSpinor> m_core;
+  const bool m_contact;
   const double m_mu;
   const std::string m_type;
 };
@@ -61,7 +63,7 @@ generate_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   if (input.has_option("help")) {
     return nullptr;
   }
-  return std::make_unique<Vee>(wf.core(), 1.0, "");
+  return std::make_unique<Vee>(wf.core(), false, 1.0, "");
 }
 
 } // namespace DiracOperator

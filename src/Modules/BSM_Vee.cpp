@@ -272,7 +272,7 @@ void V_energy_shift(const IO::InputBlock &input, const Wavefunction &wf) {
 
     const auto mu = std::exp(log_mu);
 
-    DiracOperator::Vee VeeOp(wf.core(), mu, "sp");
+    DiracOperator::Vee VeeOp(wf.core(), false, mu, "sp");
     ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
 
     if (tdhf) {
@@ -404,62 +404,93 @@ void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
     }
   }
 
-  std::vector<double> Dv_TDHFs;
+  std::vector<double> Dvs_TDHFs;
   std::vector<double> Dvs;
-  std::vector<double> i0_maxs;
-  std::vector<double> k0_maxs;
+  std::vector<double> Dvs_contact;
+  std::vector<double> Dvs_massless;
+  std::vector<double> Dvs_old;
+  // std::vector<double> i0_maxs;
+  // std::vector<double> k0_maxs;
   std::vector<double> mus;
 
   if (tdhf) {
     std::cout << "\nRunning TDHF for Vee_" << type << ".\n";
-
   } else {
-    std::cout << "\nCalculating <" << Fw.symbol() << "|D|" << Fv.symbol()
-              << "> with " << type
-              << " interaction (mediator mass = μ).\n   μ (m_e) "
-                 "         Dv     i0_max     k0_max\n";
+    std::cout << "\nTDHF = false, so D_tdhf yields 'nan'.\n";
   }
+
+  const double Dv_massless = calc_Dv(type, false, 0.0, false, wf, Fv, Fw);
 
   // Currently looks at one valence state - ground
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
        log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
     const auto mu = std::exp(log_mu);
-    double Dv = calc_Dv(type, mu, false, wf, Fv, Fw);
+    const double Dv = calc_Dv(type, false, mu, false, wf, Fv, Fw);
 
-    const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
-    const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
+    //Approximations
+    const double Dv_contact = calc_Dv(type, true, mu, false, wf, Fv, Fw);
+
+    // Old method
+    double Dv_old = 0.0;
+
+    // const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
+    // const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
+
+    // Old method
+    for (auto Fn : wf.basis()) {
+      if (Fn != Fv) {
+        double d_wn_old = d_ab(wf.grid(), Fw, Fn);
+        double V_nv_old = V_nv_direct(false, wf.core(), Fv, Fn, 1.0, mu);
+
+        if (Fv == Fw) {
+          Dv_old += 2.0 * (d_wn_old * V_nv_old) / (Fv.en() - Fn.en());
+        } else {
+          Dv_old += (d_wn_old * V_nv_old) / (Fv.en() - Fn.en());
+        }
+      }
+
+      if (Fv != Fw && Fn != Fw) {
+
+        double V_wn_old = V_nv_direct(false, wf.core(), Fn, Fw, 1.0, mu);
+        double d_nv_old = d_ab(wf.grid(), Fn, Fv);
+
+        Dv_old += (V_wn_old * d_nv_old) / (Fw.en() - Fn.en());
+      }
+    }
+
+    Dv_old = Dv_old / PhysConst::alpha;
+
+    // Store
+    Dvs.push_back(Dv);
+    Dvs_old.push_back(Dv_old);
+    Dvs_massless.push_back(Dv_massless);
+    Dvs_contact.push_back(Dv_contact);
+    mus.push_back(mu);
 
     if (tdhf) {
       std::cout << "\nμ = " << mu << "\n";
       double Dv_TDHF = 0;
-      Dv_TDHF = calc_Dv(type, mu, true, wf, Fv, Fw);
-
-      Dv_TDHFs.push_back(Dv_TDHF);
-      Dvs.push_back(Dv);
-      i0_maxs.push_back(i0_max);
-      k0_maxs.push_back(k0_max);
-      mus.push_back(mu);
+      Dv_TDHF = calc_Dv(type, false, mu, true, wf, Fv, Fw);
+      Dvs_TDHFs.push_back(Dv_TDHF);
     } else {
-      fmt::print("{:10.4e} {:11.4e} {:10.1e} {:10.1e}\n", mu, Dv, i0_max,
-                 k0_max);
+      Dvs_TDHFs.push_back(NAN);
     }
   }
 
-  if (tdhf) {
-    std::cout << "\nCalculating <" << Fw.symbol() << "|D|" << Fv.symbol()
-              << "> with " << type
-              << " interaction (mediator mass = μ).\n   μ (m_e) "
-                 "          D      D_tdfh     i0_max     k0_max\n";
-    for (int i = 0; i < mus.size(); ++i) {
-      fmt::print("{:10.4e} {:11.4e} {:11.4e} {:10.1e} {:10.1e}\n", mus[i],
-                 Dvs[i], Dv_TDHFs[i], i0_maxs[i], k0_maxs[i]);
-    }
+  std::cout << "\nCalculating <" << Fw.symbol() << "|D|" << Fv.symbol()
+            << "> with " << type
+            << " interaction (mediator mass = μ).\n   μ (m_e) "
+               "      D_old  D_massless   D_contact           D      D_tdfh\n";
+  for (int i = 0; i < mus.size(); ++i) {
+    fmt::print("{:10.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e}\n",
+               mus[i], Dvs_old[i], Dvs_massless[i], Dvs_contact[i], Dvs[i],
+               Dvs_TDHFs[i]);
   }
 }
 
-double calc_Dv(const std::string type, const double mu, const bool tdhf,
-               const Wavefunction &wf) {
+double calc_Dv(const std::string type, const bool contact, const double mu,
+               const bool tdhf, const Wavefunction &wf) {
   const auto Fv = wf.valence()[0];
   auto Fw(Fv);
   if (type == "va") {
@@ -469,11 +500,11 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
       Fw = wf.core()[wf.core().size() - 1];
     }
   }
-  return calc_Dv(type, mu, tdhf, wf, Fv, Fw);
+  return calc_Dv(type, contact, mu, tdhf, wf, Fv, Fw);
 }
 
-double calc_Dv(const std::string type, const double mu, const bool tdhf,
-               const Wavefunction &wf, const DiracSpinor &Fv) {
+double calc_Dv(const std::string type, const bool contact, const double mu,
+               const bool tdhf, const Wavefunction &wf, const DiracSpinor &Fv) {
   auto Fw(Fv);
   if (type == "va") {
     if (wf.valence().size() > 1) {
@@ -482,16 +513,15 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
       Fw = wf.core()[wf.core().size() - 1];
     }
   }
-  return calc_Dv(type, mu, tdhf, wf, Fv, Fw);
+  return calc_Dv(type, contact, mu, tdhf, wf, Fv, Fw);
 }
 
-double calc_Dv(const std::string type, const double mu, const bool tdhf,
-               const Wavefunction &wf, const DiracSpinor &Fv,
+double calc_Dv(const std::string type, const bool contact, const double mu,
+               const bool tdhf, const Wavefunction &wf, const DiracSpinor &Fv,
                const DiracSpinor &Fw) {
   // std::cout << "In test mode";
-
   double D_wv = 0.0;
-  DiracOperator::Vee VeeOp(wf.core(), mu, type);
+  DiracOperator::Vee VeeOp(wf.core(), contact, mu, type);
   DiracOperator::E1 E1(wf.grid());
 
   ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
@@ -560,6 +590,8 @@ double calc_Dv(const std::string type, const double mu, const bool tdhf,
 
   return D_wv / PhysConst::alpha;
 }
+
+// ################ OLD FUNCTIONS ###################
 
 double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb) {
   return DiracOperator::E1(gr).fullME(Fa, Fb);
