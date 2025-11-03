@@ -459,7 +459,7 @@ void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
   std::cout << "\nCalculating <" << Fw.symbol() << "|D|" << Fv.symbol()
             << "> with " << type
             << " interaction (mediator mass = μ).\n   μ (m_e) "
-               "      D_old  D_massless   D_contact           D      D_tdfh\n";
+               "      D_old  D_massless   D_contact           D      D_tdhf\n";
   for (int i = 0; i < mus.size(); ++i) {
     fmt::print("{:10.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e} {:11.4e}\n",
                mus[i], Dvs_old[i], Dvs_massless[i], Dvs_contact[i], Dvs[i],
