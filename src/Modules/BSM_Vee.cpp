@@ -26,6 +26,9 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
                {"min_mu", "Minimum mediator mass to consider [1e-6]"},
                {"max_mu", "Maximum mediator mass to consider [20]"},
                {"N_mu", "Number of masses to consider [100]"},
+               {"v_state", "Valence state (ket, |v>) to consider [ground]"},
+               {"w_state", "Valence state (bra, <w|) to consider. [ground+1] "
+                           "if type=va, otherwise [ground]."},
                {"n", "Principal quantum number for state [ground]"},
                {"kappa", "Kappa for state [ground]"},
                {"A2", "Second isotope's mass (for 'ss' or 'vv') [A+5]"},
@@ -329,38 +332,13 @@ void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
   const bool tdhf = input.get<bool>("tdhf", false);
   const std::string type = input.get<std::string>("type", "");
   const bool test = input.get<bool>("test", false);
+  const DiracSpinor Fv = *wf.getState(
+      input.get<std::string>("v_state", wf.valence()[0].shortSymbol()));
 
-  // if (input.get<bool>("test", false) == true) {
-  //   sps_testing(wf, contact);
-  //   return;
-  // }
+  const DiracSpinor default_Fw = type == "va" ? wf.valence()[1] : Fv;
 
-  int i_ground = 0;
-  double E_ground = wf.valence()[0].en();
-
-  // Find the ground state of the given valence states
-  for (int i = 1; i < wf.valence().size(); ++i) {
-    const double E_test = wf.valence()[i].en();
-
-    if (E_test < E_ground) {
-      E_ground = E_test;
-      i_ground = i;
-    }
-  }
-
-  const auto n_ground = wf.valence()[i_ground].n();
-  const auto kappa_ground = wf.valence()[i_ground].kappa();
-
-  const int v_n = input.get<int>("n", n_ground);
-  const int v_kappa = input.get<int>("kappa", kappa_ground);
-
-  // const auto Fv = *wf.getState(v_n, v_kappa);
-  const auto Fv = wf.valence()[0];
-  auto Fw = Fv;
-
-  if (type == "va") {
-    auto Fw = wf.valence()[1];
-  }
+  const DiracSpinor Fw =
+      *wf.getState(input.get<std::string>("w_state", default_Fw.symbol()));
 
   const double y_sps = 1;
 
@@ -370,39 +348,39 @@ void D_matrix_elements(const IO::InputBlock &input, const Wavefunction &wf) {
   const auto test_min_mu = 1e-6;
 
   // Test ground with all core states
-  std::cout << "\nTesting V_nv in limits for all basis states |n> with valence "
-            << Fv.symbol()
-            << ".\nShowing >10% discrepancies.\n\nFor the exact "
-               "cases,\nμ->0 = "
-            << test_min_mu << "\nμ->∞ = " << test_max_mu;
+  // std::cout << "\nTesting V_nv in limits for all basis states |n> with valence "
+  //           << Fv.symbol()
+  //           << ".\nShowing >10% discrepancies.\n\nFor the exact "
+  //              "cases,\nμ->0 = "
+  //           << test_min_mu << "\nμ->∞ = " << test_max_mu;
 
-  std::cout << "\n\nCheck OK:\n|v>  κv   |n>  κn     massless exact (μ->0) "
-               " rel diff exact "
-               "(μ->∞)      contact  rel diff\n";
+  // std::cout << "\n\nCheck OK:\n|v>  κv   |n>  κn     massless exact (μ->0) "
+  //              " rel diff exact "
+  //              "(μ->∞)      contact  rel diff\n";
 
-  for (auto Fn : wf.basis()) {
-    if (Fn.twoj() == Fv.twoj()) {
-      const auto V_massless = V_nv_direct(false, wf.core(), Fv, Fn, 1.0, 0.0);
-      const auto V_exact_min =
-          V_nv_direct(false, wf.core(), Fv, Fn, 1.0, test_min_mu);
-      const auto V_exact_max =
-          V_nv_direct(false, wf.core(), Fv, Fn, 1.0, test_max_mu);
-      const auto V_contact =
-          V_nv_direct(true, wf.core(), Fv, Fn, 1.0, test_max_mu);
+  // for (auto Fn : wf.basis()) {
+  //   if (Fn.twoj() == Fv.twoj()) {
+  //     const auto V_massless = V_nv_direct(false, wf.core(), Fv, Fn, 1.0, 0.0);
+  //     const auto V_exact_min =
+  //         V_nv_direct(false, wf.core(), Fv, Fn, 1.0, test_min_mu);
+  //     const auto V_exact_max =
+  //         V_nv_direct(false, wf.core(), Fv, Fn, 1.0, test_max_mu);
+  //     const auto V_contact =
+  //         V_nv_direct(true, wf.core(), Fv, Fn, 1.0, test_max_mu);
 
-      const auto diff_massless =
-          std::abs((V_massless - V_exact_min) / V_massless);
-      const auto diff_contact = std::abs((V_contact - V_exact_max) / V_contact);
+  //     const auto diff_massless =
+  //         std::abs((V_massless - V_exact_min) / V_massless);
+  //     const auto diff_contact = std::abs((V_contact - V_exact_max) / V_contact);
 
-      if ((diff_massless > 0.1) || (diff_contact > 0.1)) {
-        fmt::print("{:3s} {:3}  {:4s} {:3} {:12.3e} {:12.3e} {:9.3f} "
-                   "{:12.3e} {:12.3e} {:9.3f}\n",
-                   Fv.shortSymbol(), Fv.kappa(), Fn.shortSymbol(), Fn.kappa(),
-                   V_massless, V_exact_min, diff_massless, V_exact_max,
-                   V_contact, diff_contact);
-      }
-    }
-  }
+  //     if ((diff_massless > 0.1) || (diff_contact > 0.1)) {
+  //       fmt::print("{:3s} {:3}  {:4s} {:3} {:12.3e} {:12.3e} {:9.3f} "
+  //                  "{:12.3e} {:12.3e} {:9.3f}\n",
+  //                  Fv.shortSymbol(), Fv.kappa(), Fn.shortSymbol(), Fn.kappa(),
+  //                  V_massless, V_exact_min, diff_massless, V_exact_max,
+  //                  V_contact, diff_contact);
+  //     }
+  //   }
+  // }
 
   std::vector<double> Dvs_TDHFs;
   std::vector<double> Dvs;
@@ -537,6 +515,10 @@ double calc_Dv(const std::string type, const bool contact, const double mu,
       // Find non-tdhf matrix elements
       double d_wn = E1.fullME(Fw, Fn);
       double V_nv = VeeOp.fullME(Fn, Fv);
+
+      // std::cout << "<" << Fw.kappa() << "|d|" << Fn.kappa() << "> = " << d_wn
+      //           << "\t <" << Fn.kappa() << "|V|" << Fv.kappa() << "> = " << V_nv
+      //           << "\n";
 
       if (tdhf) {
         d_wn += E1.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_d.dV(Fw, Fn);

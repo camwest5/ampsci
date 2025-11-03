@@ -15,9 +15,9 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
   }
 
   DiracSpinor VFv(Fv.n(), Fv.kappa(), Fv.grid_sptr());
-  const double kappa_d_sign = ((type == "ss") || (type == "vv")) ? 1.0 : -1.0;
+  const double relative_kappa = ((type == "ss") || (type == "vv")) ? 1.0 : -1.0;
 
-  if (kappa_n != kappa_d_sign * Fv.kappa()) {
+  if (kappa_n != relative_kappa * Fv.kappa()) {
     return 0.0 * Fv;
   }
 
@@ -36,12 +36,12 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
 
         const auto Fexch_1 =
             Angular::Ck_kk(k, kappa_n, Fa.kappa()) *
-            Angular::Ck_kk(k, Fa.kappa(), kappa_d_sign * Fv.kappa()) *
+            Angular::Ck_kk(k, Fa.kappa(), relative_kappa * Fv.kappa()) *
             Bk_ab_v(k, contact, mu, false, type, Fa, Fv, Fa);
 
         const auto Fexch_2 =
             Angular::Ck_kk(k, Fa.kappa(), Fv.kappa()) *
-            Angular::Ck_kk(k, kappa_n, kappa_d_sign * Fa.kappa()) *
+            Angular::Ck_kk(k, kappa_n, relative_kappa * Fa.kappa()) *
             Bk_ab_v(k, contact, mu, true, type, Fa, Fv, Fa);
 
         Fexch += twokp1 * (Fexch_1 + Fexch_2);
