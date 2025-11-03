@@ -13,7 +13,8 @@ class Vee : public TensorOperator {
 public:
   Vee(const std::vector<DiracSpinor> &core_in, const bool contact,
       const double mu_in, const std::string type)
-      : TensorOperator(0, Parity::odd),
+      : TensorOperator(0, (type == "sp" || type == "va") ? Parity::odd :
+                                                           Parity::even),
         m_core(core_in),
         m_contact(contact),
         m_mu(mu_in),
@@ -32,7 +33,7 @@ public:
     }
   }
 
-  std::string name() const override { return std::string("V_SP"); }
+  std::string name() const override { return std::string("Vee"); }
 
   DiracSpinor radial_rhs(const int kappa_a,
                          const DiracSpinor &Fb) const override final {
