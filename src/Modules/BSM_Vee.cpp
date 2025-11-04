@@ -395,7 +395,12 @@ double calc_Vwv(const std::string type, const bool contact, const double mu,
 
   if (tdhf) {
     ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
-    tdhf_Vee.solve_core(0);
+    tdhf_Vee.solve_core(0, 100, false);
+
+    // If epsilon bad, re-run and print
+    if (tdhf_Vee.last_eps() > 1.0e8) {
+      tdhf_Vee.solve_core(0, 100, true);
+    }
 
     return (VeeOp.fullME(Fw, Fv) +
             VeeOp.rme3js(Fw.twoj(), Fv.twoj()) * tdhf_Vee.dV(Fw, Fv)) /
@@ -447,6 +452,14 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
   if (tdhf) {
     tdhf_Vee.solve_core(0);
     tdhf_d.solve_core(0);
+
+    if (tdhf_Vee.last_eps() > 1.0e8) {
+      tdhf_Vee.solve_core(0, 100, true);
+    }
+
+    if (tdhf_d.last_eps() > 1.0e8) {
+      tdhf_d.solve_core(0, 100, true);
+    }
   }
 
   for (auto Fn : wf.basis()) {
