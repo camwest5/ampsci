@@ -341,7 +341,6 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
     mus.push_back(mu);
 
     if (tdhf) {
-      std::cout << "\nμ = " << mu << "\n";
       double ME_TDHF = 0;
       ME_TDHF = calc_ME(op, type, false, mu, true, wf, Fw, Fv);
       MEs_TDHF.push_back(ME_TDHF);
@@ -399,6 +398,7 @@ double calc_Vwv(const std::string type, const bool contact, const double mu,
 
     // If epsilon bad, re-run and print
     if (tdhf_Vee.last_eps() > 1.0e8) {
+      std::cout << "CHECK μ = " << mu << "\n";
       tdhf_Vee.solve_core(0, 100, true);
     }
 
@@ -453,12 +453,9 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
     tdhf_Vee.solve_core(0);
     tdhf_d.solve_core(0);
 
-    if (tdhf_Vee.last_eps() > 1.0e8) {
+    if ((tdhf_Vee.last_eps() > 1.0e8) || (tdhf_d.last_eps() > 1.0e8)) {
+      std::cout << "CHECK μ = " << mu << "\n";
       tdhf_Vee.solve_core(0, 100, true);
-    }
-
-    if (tdhf_d.last_eps() > 1.0e8) {
-      tdhf_d.solve_core(0, 100, true);
     }
   }
 

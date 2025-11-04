@@ -105,7 +105,7 @@ DiracSpinor Bk_ab_v(const int k, const bool contact, const double mu,
     for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
       FaFb_rrk[i_gr] =
           (Fa.f(i_gr) * mod_Fb.f(i_gr) + Fa.g(i_gr) * mod_Fb.g(i_gr)) /
-          (gr.r(i_gr) * gr.r(i_gr) * (2 * k + 1));
+          (gr.r(i_gr) * gr.r(i_gr));
     }
     return FaFb_rrk * mod_Fv;
   } else if (mu == 0) {
