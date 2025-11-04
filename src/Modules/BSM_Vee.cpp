@@ -16,24 +16,27 @@
 namespace Module {
 
 void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
-  input.check({{"", "Introduces a new electron-electron "
-                    "interaction."},
-               {"type", "'sp' (scalar-pseudoscalar), 'va' (vector-axial "
-                        "vector), 'ss' (scalar-scalar), "
-                        "'vv' (vector-vector) ['sp']"},
-               {"tdhf", "Include TDHF calcs for 'sp'? [false]"},
-               {"contact", "Consider μ->infty, i.e. a contact force [false]"},
-               {"min_mu", "Minimum mediator mass to consider [1e-6]"},
-               {"max_mu", "Maximum mediator mass to consider [20]"},
-               {"N_mu", "Number of masses to consider [100]"},
-               {"v_state", "Valence state (ket, |v>) to consider [ground]"},
-               {"w_state", "Valence state (bra, <w|) to consider. [ground+1] "
-                           "if type=va, otherwise [ground]."},
-               {"n", "Principal quantum number for state [ground]"},
-               {"kappa", "Kappa for state [ground]"},
-               {"A2", "Second isotope's mass (for 'ss' or 'vv') [A+5]"},
-               {"g0", "Include the gamma-0 term on both electrons? [true]"},
-               {"test", "Run module testing [false]"}});
+  input.check(
+      {{"", "Introduces a new electron-electron "
+            "interaction."},
+       {"type", "'sp' (scalar-pseudoscalar), 'va' (vector-axial "
+                "vector), 'ss' (scalar-scalar), "
+                "'vv' (vector-vector) ['sp']"},
+       {"tdhf", "Include TDHF calcs for 'sp'? [false]"},
+       {"contact", "Consider μ->infty, i.e. a contact force [false]"},
+       {"min_mu", "Minimum mediator mass to consider [1e-6]"},
+       {"max_mu", "Maximum mediator mass to consider [20]"},
+       {"N_mu", "Number of masses to consider [100]"},
+       {"v_state", "Valence state (ket, |v>) to consider [ground]"},
+       {"w_state", "Valence state (bra, <w|) to consider. [ground+1] "
+                   "if type=va, otherwise [ground]."},
+       {"operator",
+        "Operator to get matrix element of; otherwise, all applicable."},
+       {"n", "Principal quantum number for state [ground]"},
+       {"kappa", "Kappa for state [ground]"},
+       {"A2", "Second isotope's mass (for 'ss' or 'vv') [A+5]"},
+       {"g0", "Include the gamma-0 term on both electrons? [true]"},
+       {"test", "Run module testing [false]"}});
 
   // If we are just requesting 'help', don't run module:
   if (input.has_option("help")) {
@@ -64,10 +67,14 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   const DiracSpinor Fw =
       *wf.getState(input.get<std::string>("w_state", default_Fw.symbol()));
 
-  if (int_type == "sp" || int_type == "va") {
-    matrix_elements(wf, Fv, Fw, "D", int_type, true, min_mu, max_mu, N_mu);
+  const std::string op = input.get<std::string>("operator", "");
+
+  if (op != "") {
+    matrix_elements(wf, Fv, Fw, op, int_type, tdhf, min_mu, max_mu, N_mu);
+  } else if (int_type == "sp" || int_type == "va") {
+    matrix_elements(wf, Fv, Fw, "D", int_type, tdhf, min_mu, max_mu, N_mu);
   } else if (int_type == "ss" || int_type == "vv") {
-    matrix_elements(wf, Fv, Fw, "V", int_type, true, min_mu, max_mu, N_mu);
+    matrix_elements(wf, Fv, Fw, "V", int_type, tdhf, min_mu, max_mu, N_mu);
     // V_energy_shift(input, wf);
     // matrix_elements(input, wf); // for now, testing
   } else {
