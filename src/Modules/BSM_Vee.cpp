@@ -457,12 +457,13 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
   ExternalField::TDHF tdhf_d(&E1, wf.vHF());
 
   if (tdhf) {
-    tdhf_Vee.solve_core(0);
-    tdhf_d.solve_core(0);
+    tdhf_Vee.solve_core(0, 100, false);
+    tdhf_d.solve_core(0, 100, false);
 
-    if ((tdhf_Vee.last_eps() > 1.0e8) || (tdhf_d.last_eps() > 1.0e8)) {
+    if ((tdhf_Vee.last_eps() > 1.0e-8) || (tdhf_d.last_eps() > 1.0e-8)) {
       std::cout << "CHECK μ = " << mu << "\n";
       tdhf_Vee.solve_core(0, 100, true);
+      tdhf_d.solve_core(0, 100, true);
     }
   }
 
