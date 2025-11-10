@@ -2,7 +2,9 @@
 #include "Angular/Wigner369j.hpp"
 #include "DiracOperator/Operators/Ek.hpp"
 #include "DiracOperator/Operators/Vee.hpp"
+#include "ExternalField/DiagramRPA.hpp"
 #include "ExternalField/TDHF.hpp"
+#include "ExternalField/TDHFbasis.hpp"
 #include "IO/InputBlock.hpp"
 #include "Maths/NumCalc_quadIntegrate.hpp"
 #include "Maths/SphericalBessel.hpp"
@@ -453,18 +455,35 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
   DiracOperator::Vee VeeOp(wf.core(), contact, mu, type);
   DiracOperator::E1 E1(wf.grid());
 
+  // For testing - TDHFbasis
+  // μ=5 for Cs
+  // ExternalField::TDHFbasis tdhf_Vee(&VeeOp, wf.vHF(), wf.basis());
+
+  // For testing - diagramRPA
+  // μ=5 for Cs:
+  // ExternalField::DiagramRPA tdhf_Vee(&VeeOp, wf.basis(), wf.vHF(),
+  //                                    wf.atomicSymbol());
+
+  // μ=5 for Cs: 2min but all >=**
   ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
   ExternalField::TDHF tdhf_d(&E1, wf.vHF());
 
-  if (tdhf) {
-    tdhf_Vee.solve_core(0, 100, false);
-    tdhf_d.solve_core(0, 100, false);
+  // Numerically stable for heavier systems.
+  // Ideally, build this in properly (check convergence, if failing, restart with this version)
+  if ((wf.Znuc() == 55) || (wf.Znuc() == 87) || (wf.Znuc() == 70)) {
+    ExternalField::TDHFbasis tdhf_Vee(&VeeOp, wf.vHF(), wf.basis());
+  }
 
-    if ((tdhf_Vee.last_eps() > 1.0e-8) || (tdhf_d.last_eps() > 1.0e-8)) {
-      std::cout << "CHECK μ = " << mu << "\n";
-      tdhf_Vee.solve_core(0, 100, true);
-      tdhf_d.solve_core(0, 100, true);
-    }
+  if (tdhf) {
+    std::cout << "\nμ = " << mu << "\n";
+    tdhf_Vee.solve_core(0, 100, true);
+    tdhf_d.solve_core(0, 100, true);
+
+    // if ((tdhf_Vee.last_eps() > 1.0e-8) || (tdhf_d.last_eps() > 1.0e-8)) {
+    //   std::cout << "CHECK μ = " << mu << "\n";
+    //   tdhf_Vee.solve_core(0, 100, true);
+    //   tdhf_d.solve_core(0, 100, true);
+    // }
   }
 
   for (auto Fn : wf.basis()) {
