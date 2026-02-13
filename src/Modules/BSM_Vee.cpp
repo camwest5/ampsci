@@ -59,6 +59,7 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   const double min_mu = input.get<double>("min_mu", 1.0e-4);
   const double max_mu = input.get<double>("max_mu", 1.0e4);
   const double N_mu = input.get<double>("N_mu", 100.0);
+  const bool contact = input.get<bool>("contact", false);
   const bool tdhf = input.get<bool>("tdhf", false);
   const std::string type = input.get<std::string>("type", "");
   const DiracSpinor Fv = *wf.getState(
@@ -72,11 +73,14 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   const std::string op = input.get<std::string>("operator", "");
 
   if (op != "") {
-    matrix_elements(wf, Fv, Fw, op, int_type, tdhf, min_mu, max_mu, N_mu);
+    matrix_elements(wf, Fv, Fw, op, int_type, contact, tdhf, min_mu, max_mu,
+                    N_mu);
   } else if (int_type == "sp" || int_type == "va") {
-    matrix_elements(wf, Fv, Fw, "D", int_type, tdhf, min_mu, max_mu, N_mu);
+    matrix_elements(wf, Fv, Fw, "D", int_type, contact, tdhf, min_mu, max_mu,
+                    N_mu);
   } else if (int_type == "ss" || int_type == "vv") {
-    matrix_elements(wf, Fv, Fw, "V", int_type, tdhf, min_mu, max_mu, N_mu);
+    matrix_elements(wf, Fv, Fw, "V", int_type, contact, tdhf, min_mu, max_mu,
+                    N_mu);
     // V_energy_shift(input, wf);
     // matrix_elements(input, wf); // for now, testing
   } else {
@@ -239,8 +243,9 @@ double dE(const double mu, const std::string int_type,
 
 void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
                      const DiracSpinor &Fw, const std::string op,
-                     const std::string type, const bool tdhf,
-                     const double min_mu, const double max_mu, const int N_mu) {
+                     const std::string type, const bool contact,
+                     const bool tdhf, const double min_mu, const double max_mu,
+                     const int N_mu) {
 
   const double y_sps = 1;
 
@@ -321,7 +326,7 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
       for (auto Fn : wf.basis()) {
         if (Fn != Fv) {
           double d_wn_old = d_ab(wf.grid(), Fw, Fn);
-          double V_nv_old = V_nv_direct(false, wf.core(), Fv, Fn, 1.0, mu);
+          double V_nv_old = V_nv_direct(contact, wf.core(), Fv, Fn, 1.0, mu);
 
           if (Fv == Fw) {
             Dv_old += 2.0 * (d_wn_old * V_nv_old) / (Fv.en() - Fn.en());
@@ -332,7 +337,7 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
 
         if (Fv != Fw && Fn != Fw) {
 
-          double V_wn_old = V_nv_direct(false, wf.core(), Fn, Fw, 1.0, mu);
+          double V_wn_old = V_nv_direct(contact, wf.core(), Fn, Fw, 1.0, mu);
           double d_nv_old = d_ab(wf.grid(), Fn, Fv);
 
           Dv_old += (V_wn_old * d_nv_old) / (Fw.en() - Fn.en());
@@ -566,7 +571,7 @@ double V_nv_direct(const bool contact, const std::vector<DiracSpinor> core,
                    const double mu, const bool g0_both) {
 
   // For safety
-  if (Fv.twoj() != Fn.twoj()) {
+  if (Fv.kappa() != -Fn.kappa()) {
     return 0.0;
   }
 
@@ -575,28 +580,26 @@ double V_nv_direct(const bool contact, const std::vector<DiracSpinor> core,
   auto u_anva = 0.0;
 
   for (auto Fa : core) {
-    if (Fn.kappa() == -Fv.kappa()) {
-      const auto R0_anav = contact == true ?
-                               R_abcd_contact(mu, Fa, Fn, Fa, Fv) :
-                           mu == 0.0 ? Rk_abcd_massless(0, Fa, Fn, Fa, Fv) :
-                                       Rk_abcd(0, mu, Fa, Fn, Fa, Fv);
-      u_anav += R0_anav * Fa.twojp1();
-    }
+    const auto R0_anav = contact == true ? R_abcd_contact(mu, Fa, Fn, Fa, Fv) :
+                         mu == 0.0       ? Rk_abcd_massless(0, Fa, Fn, Fa, Fv) :
+                                           Rk_abcd(0, mu, Fa, Fn, Fa, Fv);
+    u_anav += R0_anav * Fa.twojp1();
+
+    const auto phase =
+        std::pow(-1.0, 0.5 * (Fv.twoj() - Fa.twoj())) * (1.0 / Fv.twojp1());
 
     for (int twok = std::abs(Fa.twoj() - Fv.twoj());
          twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
       if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
         const double k = 0.5 * twok;
-        const auto A_anva = (2.0 * k + 1) *
-                            Angular::Ck_kk(k, Fa.kappa(), Fv.kappa()) *
+        const auto A_anva = Angular::Ck_kk(k, Fa.kappa(), Fv.kappa()) *
                             Angular::Ck_kk(k, Fn.kappa(), -Fa.kappa());
         const auto R_anva = contact == true ?
                                 R_abcd_contact(mu, Fa, Fn, Fv, Fa) :
                             mu == 0.0 ? Rk_abcd_massless(k, Fa, Fn, Fv, Fa) :
                                         Rk_abcd(k, mu, Fa, Fn, Fv, Fa);
 
-        const auto A_naav = (2.0 * k + 1) *
-                            Angular::Ck_kk(k, Fn.kappa(), Fa.kappa()) *
+        const auto A_naav = Angular::Ck_kk(k, Fn.kappa(), Fa.kappa()) *
                             Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa());
         const auto R_naav = contact == true ?
                                 R_abcd_contact(mu, Fn, Fa, Fa, Fv) :
@@ -609,15 +612,15 @@ double V_nv_direct(const bool contact, const std::vector<DiracSpinor> core,
                   << "\n";
         std::cout << "A_anva = " << A_anva << "\n"; */
 
-        u_anva += A_anva * R_anva;
-        u_naav += A_naav * R_naav;
+        // std::cout << Fn * BSM_Vee::Bk_ab_v(k, contact, mu, false, "sp", Fa, Fv,
+        //                                    Fa)
+        //           << "\n";
+        // std::cout << R_naav << "\n\n";
+
+        u_anva += phase * (twok + 1) * A_anva * R_anva;
+        u_naav += phase * (twok + 1) * A_naav * R_naav;
       }
     }
-
-    const auto phase =
-        std::pow(-1.0, 0.5 * (Fv.twoj() - Fa.twoj())) * (1.0 / Fv.twojp1());
-    u_naav *= phase;
-    u_anva *= phase;
   }
 
   return (u_anav - u_naav - u_anva) * y;
@@ -634,11 +637,15 @@ double Rk_abcd(const double k, const double mu, const DiracSpinor &Fa,
   //const auto i0 = std::max(Fa.min_pt(), Fc.min_pt());
   //const auto imax = std::min(Fa.max_pt(), Fc.max_pt());
 
-  const auto g_Fc = int_type == "vv" ? Fc : g0_both ? BSM_Vee::g0(Fc) : Fc;
+  // const auto g_Fc = int_type == "vv" ? Fc : g0_both ? BSM_Vee::g0(Fc) : Fc;
 
-  const auto g_Fd = int_type == "sp" ? BSM_Vee::old_i_g0_g5(Fd) :
-                    int_type == "ss" ? BSM_Vee::g0(Fd) :
-                                       Fd;
+  // const auto g_Fd = int_type == "sp" ? BSM_Vee::old_i_g0_g5(Fd) :
+  //                   int_type == "ss" ? BSM_Vee::g0(Fd) :
+  //                                      Fd;
+
+  // Using new method funcs, only sp:
+  const auto g_Fc = BSM_Vee::g0(Fc);
+  const auto g_Fd = -1.0 * BSM_Vee::g5(Fd);
 
   const auto screening_function = Bk_ab(k, mu, Fb, g_Fd);
 

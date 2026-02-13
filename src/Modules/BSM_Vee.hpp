@@ -24,9 +24,9 @@ double dE(const double mu, const std::string int_type,
 
 void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
                      const DiracSpinor &Fw, const std::string op,
-                     const std::string type, const bool tdhf = true,
-                     const double min_mu = 1e-04, const double max_mu = 1e4,
-                     const int N_mu = 100);
+                     const std::string type, const bool contact,
+                     const bool tdhf = true, const double min_mu = 1e-04,
+                     const double max_mu = 1e4, const int N_mu = 100);
 // ############## OLD FUNCTIONS #################
 
 double d_ab(const Grid &gr, const DiracSpinor &Fa, const DiracSpinor &Fb);
