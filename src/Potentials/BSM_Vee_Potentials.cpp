@@ -30,22 +30,25 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
 
     for (int twok = std::abs(Fa.twoj() - Fv.twoj());
          twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
-      if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
-        const int k = twok / 2;
-        const int twokp1 = twok + 1;
 
-        const auto Fexch_1 =
-            Angular::Ck_kk(k, kappa_n, Fa.kappa()) *
-            Angular::Ck_kk(k, Fa.kappa(), relative_kappa * Fv.kappa()) *
-            Bk_ab_v(k, contact, mu, false, type, Fa, Fv, Fa);
+      const double k = 0.5 * twok;
+      const int twokp1 = twok + 1;
 
-        const auto Fexch_2 =
-            Angular::Ck_kk(k, Fa.kappa(), Fv.kappa()) *
-            Angular::Ck_kk(k, kappa_n, relative_kappa * Fa.kappa()) *
-            Bk_ab_v(k, contact, mu, true, type, Fa, Fv, Fa);
+      const auto A_naav = Angular::Ck_kk(k, kappa_n, Fa.kappa()) *
+                          Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa());
 
-        Fexch += twokp1 * (Fexch_1 + Fexch_2);
-      }
+      // u_naav... I think
+      const auto Fexch_AB =
+          A_naav * Bk_ab_v(k, contact, mu, false, type, Fa, Fv, Fa);
+
+      const auto A_anva = Angular::Ck_kk(k, Fa.kappa(), Fv.kappa()) *
+                          Angular::Ck_kk(k, kappa_n, -Fa.kappa());
+
+      // u_anva... I think. Appears to be about 3 orders of magnitude smaller? In contact lim at least.
+      const auto Fexch_BA =
+          A_anva * Bk_ab_v(k, contact, mu, true, type, Fa, Fv, Fa);
+
+      Fexch += twokp1 * (Fexch_AB + Fexch_BA);
     }
 
     const auto phase =
@@ -54,6 +57,7 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
     Fexch *= phase;
 
     VFv += Fdir - Fexch;
+    // VFv += 2.0 * Fdir;
   }
 
   double mu_factor;
