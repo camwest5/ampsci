@@ -493,6 +493,17 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
 
   for (auto Fn : wf.basis()) {
     if (Fn != Fv) {
+      // For testing: y gets used as VFv = y * Fdir - (2 - y) * Fexch such that
+      // y = 1.0: VFv = Fdir - Fexch
+      // y = 2.0: VFv = 2.0 * Fdir
+      std::cout << "\n"
+                << Fn * BSM_Vee::V_Fv(wf.core(), Fv, "va", Fn.kappa(), 1.0,
+                                      true, 1.0);
+      std::cout << "\n"
+                << Fn * BSM_Vee::V_Fv(wf.core(), Fv, "va", Fn.kappa(), 2.0,
+                                      true, 1.0)
+                << "\n=?\n";
+
       // Find non-tdhf matrix elements
       double V_nv = VeeOp.fullME(Fn, Fv);
       double d_wn = E1.fullME(Fw, Fn);

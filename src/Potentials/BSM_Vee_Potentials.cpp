@@ -28,10 +28,16 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
 
     DiracSpinor Fexch(Fa.n(), Fa.kappa(), Fa.grid_sptr());
 
-    for (int twok = std::abs(Fa.twoj() - Fv.twoj());
-         twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
+    // for (int twok = std::abs(Fa.twoj() - Fv.twoj());
+    //      twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
 
-      const double k = 0.5 * twok;
+    const auto phase = Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) *
+                       (1.0 / (4 * M_PI * Fv.twojp1()));
+
+    for (int k = 0; k <= Fa.twoj() + Fv.twoj(); ++k) {
+
+      // const double k = 0.5 * twok;
+      const auto twok = 2.0 * k;
       const int twokp1 = twok + 1;
 
       const auto A_naav = Angular::Ck_kk(k, kappa_n, Fa.kappa()) *
@@ -48,15 +54,9 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
       const auto Fexch_BA =
           A_anva * Bk_ab_v(k, contact, mu, true, type, Fa, Fv, Fa);
 
-      Fexch += twokp1 * (Fexch_AB + Fexch_BA);
+      Fexch += phase * twokp1 * (Fexch_AB + Fexch_BA);
     }
-
-    const auto phase =
-        Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) * (1.0 / Fv.twojp1());
-
-    Fexch *= phase;
-
-    VFv += Fdir - Fexch;
+    VFv += y * Fdir - (2 - y) * Fexch;
     // VFv += 2.0 * Fdir;
   }
 
@@ -70,7 +70,7 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
     mu_factor = mu;
   }
 
-  return mu_factor * y * VFv;
+  return mu_factor * VFv;
 }
 
 DiracSpinor Bk_ab_v(const int k, const bool contact, const double mu,
@@ -106,13 +106,13 @@ DiracSpinor Bk_ab_v(const int k, const bool contact, const double mu,
   }
 
   if (contact == true) {
-    std::vector<double> FaFb_rrk(gr.size());
+    std::vector<double> FaFb_rr(gr.size());
     for (int i_gr = 0; i_gr < gr.size(); ++i_gr) {
-      FaFb_rrk[i_gr] =
+      FaFb_rr[i_gr] =
           (Fa.f(i_gr) * mod_Fb.f(i_gr) + Fa.g(i_gr) * mod_Fb.g(i_gr)) /
           (gr.r(i_gr) * gr.r(i_gr));
     }
-    return FaFb_rrk * mod_Fv;
+    return FaFb_rr * mod_Fv;
   } else if (mu == 0) {
     return Coulomb::yk_ab(k, Fa, mod_Fb) * mod_Fv * (1.0 / (2.0 * k + 1));
   } else {
