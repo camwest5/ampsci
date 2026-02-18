@@ -25,6 +25,7 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
                 "vector), 'ss' (scalar-scalar), "
                 "'vv' (vector-vector) ['sp']"},
        {"tdhf", "Include TDHF calcs for 'sp'? [false]"},
+       {"omega", "ω (for tdhf) [0]"},
        {"contact", "Consider μ->infty, i.e. a contact force [false]"},
        {"min_mu", "Minimum mediator mass to consider [1e-6]"},
        {"max_mu", "Maximum mediator mass to consider [20]"},
@@ -61,6 +62,7 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   const double N_mu = input.get<double>("N_mu", 100.0);
   const bool contact = input.get<bool>("contact", false);
   const bool tdhf = input.get<bool>("tdhf", false);
+  const double omega = input.get<double>("omega", 0.0);
   const std::string type = input.get<std::string>("type", "");
   const DiracSpinor Fv = *wf.getState(
       input.get<std::string>("v_state", wf.valence()[0].shortSymbol()));
@@ -73,14 +75,14 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   const std::string op = input.get<std::string>("operator", "");
 
   if (op != "") {
-    matrix_elements(wf, Fv, Fw, op, int_type, contact, tdhf, min_mu, max_mu,
-                    N_mu);
+    matrix_elements(wf, Fv, Fw, op, int_type, contact, tdhf, omega, min_mu,
+                    max_mu, N_mu);
   } else if (int_type == "sp" || int_type == "va") {
-    matrix_elements(wf, Fv, Fw, "D", int_type, contact, tdhf, min_mu, max_mu,
-                    N_mu);
+    matrix_elements(wf, Fv, Fw, "D", int_type, contact, tdhf, omega, min_mu,
+                    max_mu, N_mu);
   } else if (int_type == "ss" || int_type == "vv") {
-    matrix_elements(wf, Fv, Fw, "V", int_type, contact, tdhf, min_mu, max_mu,
-                    N_mu);
+    matrix_elements(wf, Fv, Fw, "V", int_type, contact, tdhf, omega, min_mu,
+                    max_mu, N_mu);
     // V_energy_shift(input, wf);
     // matrix_elements(input, wf); // for now, testing
   } else {
@@ -244,8 +246,8 @@ double dE(const double mu, const std::string int_type,
 void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
                      const DiracSpinor &Fw, const std::string op,
                      const std::string type, const bool contact,
-                     const bool tdhf, const double min_mu, const double max_mu,
-                     const int N_mu) {
+                     const bool tdhf, const double omega, const double min_mu,
+                     const double max_mu, const int N_mu) {
 
   const double y_sps = 1;
 
@@ -304,16 +306,18 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
     std::cout << "\nTDHF = false, so ME_tdhf yields 'nan'.\n";
   }
 
-  const double ME_massless = calc_ME(op, type, false, 0.0, false, wf, Fw, Fv);
+  const double ME_massless =
+      calc_ME(op, type, false, 0.0, false, omega, wf, Fw, Fv);
 
   for (double log_mu = log(min_mu); log_mu < log(max_mu);
        log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
 
     const auto mu = std::exp(log_mu);
-    const double ME = calc_ME(op, type, false, mu, false, wf, Fw, Fv);
+    const double ME = calc_ME(op, type, false, mu, false, omega, wf, Fw, Fv);
 
     //Approximations
-    const double ME_contact = calc_ME(op, type, true, mu, false, wf, Fw, Fv);
+    const double ME_contact =
+        calc_ME(op, type, true, mu, false, omega, wf, Fw, Fv);
 
     // Old method for Dv
     double Dv_old = 0.0;
@@ -356,7 +360,7 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
 
     if (tdhf) {
       double ME_TDHF = 0;
-      ME_TDHF = calc_ME(op, type, false, mu, true, wf, Fw, Fv);
+      ME_TDHF = calc_ME(op, type, false, mu, true, omega, wf, Fw, Fv);
       MEs_TDHF.push_back(ME_TDHF);
     } else {
       MEs_TDHF.push_back(NAN);
@@ -389,31 +393,32 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
 }
 
 double calc_ME(const std::string op, const std::string type, const bool contact,
-               const double mu, const bool tdhf, const Wavefunction &wf,
-               const DiracSpinor &Fw, const DiracSpinor &Fv) {
+               const double mu, const bool tdhf, const double omega,
+               const Wavefunction &wf, const DiracSpinor &Fw,
+               const DiracSpinor &Fv) {
   if (op == "D") {
-    return calc_Dwv(type, contact, mu, tdhf, wf, Fw, Fv);
+    return calc_Dwv(type, contact, mu, tdhf, omega, wf, Fw, Fv);
   } else if (op == "V") {
-    return calc_Vwv(type, contact, mu, tdhf, wf, Fw, Fv);
+    return calc_Vwv(type, contact, mu, tdhf, omega, wf, Fw, Fv);
   } else {
     return 0.0;
   }
 }
 
 double calc_Vwv(const std::string type, const bool contact, const double mu,
-                const bool tdhf, const Wavefunction &wf, const DiracSpinor &Fw,
-                const DiracSpinor &Fv) {
+                const bool tdhf, const double omega, const Wavefunction &wf,
+                const DiracSpinor &Fw, const DiracSpinor &Fv) {
 
   DiracOperator::Vee VeeOp(wf.core(), contact, mu, type);
 
   if (tdhf) {
     ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
-    tdhf_Vee.solve_core(0, 100, false);
+    tdhf_Vee.solve_core(omega, 100, false);
 
     // If epsilon bad, re-run and print
     if (tdhf_Vee.last_eps() > 1.0e8) {
       std::cout << "CHECK μ = " << mu << "\n";
-      tdhf_Vee.solve_core(0, 100, true);
+      tdhf_Vee.solve_core(omega, 100, true);
     }
 
     return (VeeOp.fullME(Fw, Fv) +
@@ -453,8 +458,8 @@ double calc_Vwv(const std::string type, const bool contact, const double mu,
 // }
 
 double calc_Dwv(const std::string type, const bool contact, const double mu,
-                const bool tdhf, const Wavefunction &wf, const DiracSpinor &Fw,
-                const DiracSpinor &Fv) {
+                const bool tdhf, const double omega, const Wavefunction &wf,
+                const DiracSpinor &Fw, const DiracSpinor &Fv) {
   // std::cout << "In test mode";
   double D_wv = 0.0;
   DiracOperator::Vee VeeOp(wf.core(), contact, mu, type);
@@ -481,8 +486,8 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
 
   if (tdhf) {
     std::cout << "\nμ = " << mu << "\n";
-    tdhf_Vee.solve_core(0, 100, true);
-    tdhf_d.solve_core(0, 100, true);
+    tdhf_Vee.solve_core(omega, 100, true);
+    tdhf_d.solve_core(omega, 100, true);
 
     // if ((tdhf_Vee.last_eps() > 1.0e-8) || (tdhf_d.last_eps() > 1.0e-8)) {
     //   std::cout << "CHECK μ = " << mu << "\n";
@@ -496,6 +501,8 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
       // For testing: y gets used as VFv = y * Fdir - (2 - y) * Fexch such that
       // y = 1.0: VFv = Fdir - Fexch
       // y = 2.0: VFv = 2.0 * Fdir
+
+      /*
       std::cout << "\n"
                 << Fn * BSM_Vee::V_Fv(wf.core(), Fv, "va", Fn.kappa(), 1.0,
                                       true, 1.0);
@@ -503,6 +510,7 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
                 << Fn * BSM_Vee::V_Fv(wf.core(), Fv, "va", Fn.kappa(), 2.0,
                                       true, 1.0)
                 << "\n=?\n";
+                */
 
       // Find non-tdhf matrix elements
       double V_nv = VeeOp.fullME(Fn, Fv);
