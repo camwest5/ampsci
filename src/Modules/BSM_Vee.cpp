@@ -360,7 +360,7 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
 
     if (tdhf) {
       double ME_TDHF = 0;
-      ME_TDHF = calc_ME(op, type, false, mu, true, omega, wf, Fw, Fv);
+      ME_TDHF = calc_ME(op, type, contact, mu, true, omega, wf, Fw, Fv);
       MEs_TDHF.push_back(ME_TDHF);
     } else {
       MEs_TDHF.push_back(NAN);
@@ -480,7 +480,7 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
 
   // Numerically stable for heavier systems.
   // Ideally, build this in properly (check convergence, if failing, restart with this version)
-  if ((wf.Znuc() == 55) || (wf.Znuc() == 87) || (wf.Znuc() == 70)) {
+  if (wf.Znuc() >= 55) {
     ExternalField::TDHFbasis tdhf_Vee(&VeeOp, wf.vHF(), wf.basis());
   }
 
