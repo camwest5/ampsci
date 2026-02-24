@@ -14,6 +14,7 @@
 #include "ampsci/ampsci.hpp"
 #include <cmath>
 #include <gsl/gsl_sf.h>
+#include <omp.h>
 
 namespace Module {
 
@@ -291,14 +292,21 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
   //   }
   // }
 
-  std::vector<double> MEs_TDHF;
-  std::vector<double> MEs;
-  std::vector<double> MEs_contact;
-  std::vector<double> MEs_massless;
-  std::vector<double> Dvs_old;
+  std::vector<double> mus;
+
+  // Populate mus
+  for (double log_mu = log(min_mu); log_mu <= log(max_mu);
+       log_mu += std::abs(log(max_mu) - log(min_mu)) * (1.0 / N_mu)) {
+    mus.push_back(std::exp(log_mu));
+  }
+
+  const auto actual_N_mu = mus.size();
+  std::vector<double> MEs_TDHF(actual_N_mu);
+  std::vector<double> MEs(actual_N_mu);
+  std::vector<double> MEs_contact(actual_N_mu);
+  std::vector<double> Dvs_old(actual_N_mu);
   // std::vector<double> i0_maxs;
   // std::vector<double> k0_maxs;
-  std::vector<double> mus;
 
   if (tdhf) {
     std::cout << "\nRunning TDHF.\n";
@@ -309,61 +317,72 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
   const double ME_massless =
       calc_ME(op, type, false, 0.0, false, omega, wf, Fw, Fv);
 
-  for (double log_mu = log(min_mu); log_mu < log(max_mu);
-       log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
+  std::vector<double> MEs_massless(actual_N_mu, ME_massless);
 
-    const auto mu = std::exp(log_mu);
-    const double ME = calc_ME(op, type, false, mu, false, omega, wf, Fw, Fv);
+#pragma omp parallel default(none)                                             \
+    shared(op, type, contact, tdhf, omega, wf, Fw, Fv, MEs_TDHF, MEs,          \
+               actual_N_mu, ME_massless, MEs_contact, MEs_massless, Dvs_old,   \
+               mus, std::cout)
+  {
 
-    //Approximations
-    const double ME_contact =
-        calc_ME(op, type, true, mu, false, omega, wf, Fw, Fv);
+#pragma omp for
+    for (int i = 0; i < actual_N_mu; ++i) {
 
-    // Old method for Dv
-    double Dv_old = 0.0;
-    if (op == "D") {
+      const auto mu = mus[i];
+      const double ME = calc_ME(op, type, false, mu, false, omega, wf, Fw, Fv);
 
-      // const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
-      // const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
+      //Approximations
+      const double ME_contact =
+          calc_ME(op, type, true, mu, false, omega, wf, Fw, Fv);
 
-      // Old method
-      for (auto Fn : wf.basis()) {
-        if (Fn != Fv) {
-          double d_wn_old = d_ab(wf.grid(), Fw, Fn);
-          double V_nv_old = V_nv_direct(contact, wf.core(), Fv, Fn, 1.0, mu);
+      // Old method for Dv
+      double Dv_old = 0.0;
+      if (op == "D") {
 
-          if (Fv == Fw) {
-            Dv_old += 2.0 * (d_wn_old * V_nv_old) / (Fv.en() - Fn.en());
-          } else {
-            Dv_old += (d_wn_old * V_nv_old) / (Fv.en() - Fn.en());
+        // const auto i0_max = BSM_Vee::mod_sph_bessel_i(0.0, mu * wf.grid().rmax());
+        // const auto k0_max = BSM_Vee::mod_sph_bessel_k(0.0, mu * wf.grid().rmax());
+
+        // Old method
+        for (auto Fn : wf.basis()) {
+          if (Fn != Fv) {
+            double d_wn_old = d_ab(wf.grid(), Fw, Fn);
+            double V_nv_old = V_nv_direct(contact, wf.core(), Fv, Fn, 1.0, mu);
+
+            if (Fv == Fw) {
+              Dv_old += 2.0 * (d_wn_old * V_nv_old) / (Fv.en() - Fn.en());
+            } else {
+              Dv_old += (d_wn_old * V_nv_old) / (Fv.en() - Fn.en());
+            }
+          }
+
+          if (Fv != Fw && Fn != Fw) {
+
+            double V_wn_old = V_nv_direct(contact, wf.core(), Fn, Fw, 1.0, mu);
+            double d_nv_old = d_ab(wf.grid(), Fn, Fv);
+
+            Dv_old += (V_wn_old * d_nv_old) / (Fw.en() - Fn.en());
           }
         }
 
-        if (Fv != Fw && Fn != Fw) {
-
-          double V_wn_old = V_nv_direct(contact, wf.core(), Fn, Fw, 1.0, mu);
-          double d_nv_old = d_ab(wf.grid(), Fn, Fv);
-
-          Dv_old += (V_wn_old * d_nv_old) / (Fw.en() - Fn.en());
-        }
+        Dv_old = Dv_old / PhysConst::alpha;
       }
 
-      Dv_old = Dv_old / PhysConst::alpha;
-      Dvs_old.push_back(Dv_old);
-    }
-
-    // Store
-    MEs.push_back(ME);
-    MEs_massless.push_back(ME_massless);
-    MEs_contact.push_back(ME_contact);
-    mus.push_back(mu);
-
-    if (tdhf) {
       double ME_TDHF = 0;
-      ME_TDHF = calc_ME(op, type, contact, mu, true, omega, wf, Fw, Fv);
-      MEs_TDHF.push_back(ME_TDHF);
-    } else {
-      MEs_TDHF.push_back(NAN);
+      if (tdhf) {
+        ME_TDHF = calc_ME(op, type, contact, mu, true, omega, wf, Fw, Fv);
+      } else {
+        ME_TDHF = NAN;
+      }
+
+// Store
+#pragma omp critical
+      {
+        Dvs_old[i] = Dv_old;
+        MEs[i] = ME;
+        MEs_massless[i] = ME_massless;
+        MEs_contact[i] = ME_contact;
+        MEs_TDHF[i] = ME_TDHF;
+      }
     }
   }
 
