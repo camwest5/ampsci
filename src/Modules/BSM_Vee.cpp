@@ -465,35 +465,20 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
   DiracOperator::Vee VeeOp(wf.core(), contact, mu, type);
   DiracOperator::E1 E1(wf.grid());
 
-  // For testing - TDHFbasis
-  // μ=5 for Cs
-  // ExternalField::TDHFbasis tdhf_Vee(&VeeOp, wf.vHF(), wf.basis());
-
-  // For testing - diagramRPA
-  // μ=5 for Cs:
-  // ExternalField::DiagramRPA tdhf_Vee(&VeeOp, wf.basis(), wf.vHF(),
-  //                                    wf.atomicSymbol());
-
-  // μ=5 for Cs: 2min but all >=**
   ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
-  ExternalField::TDHF tdhf_d(&E1, wf.vHF());
+  ExternalField::TDHFbasis tdhfbasis_Vee(&VeeOp, wf.vHF(), wf.basis());
 
-  // Numerically stable for heavier systems.
-  // Ideally, build this in properly (check convergence, if failing, restart with this version)
-  if (wf.Znuc() >= 55) {
-    ExternalField::TDHFbasis tdhf_Vee(&VeeOp, wf.vHF(), wf.basis());
-  }
+  ExternalField::TDHF tdhf_d(&E1, wf.vHF());
 
   if (tdhf) {
     std::cout << "\nμ = " << mu << "\n";
-    tdhf_Vee.solve_core(omega, 100, true);
     tdhf_d.solve_core(omega, 100, true);
 
-    // if ((tdhf_Vee.last_eps() > 1.0e-8) || (tdhf_d.last_eps() > 1.0e-8)) {
-    //   std::cout << "CHECK μ = " << mu << "\n";
-    //   tdhf_Vee.solve_core(0, 100, true);
-    //   tdhf_d.solve_core(0, 100, true);
-    // }
+    if (wf.Znuc() < 55) {
+      tdhf_Vee.solve_core(omega, 100, true);
+    } else {
+      tdhfbasis_Vee.solve_core(omega, 100, true);
+    }
   }
 
   for (auto Fn : wf.basis()) {
@@ -518,7 +503,12 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
 
       if (tdhf) {
         d_wn += E1.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_d.dV(Fw, Fn);
-        V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_Vee.dV(Fn, Fv);
+
+        if (wf.Znuc() < 55) {
+          V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_Vee.dV(Fn, Fv);
+        } else {
+          V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhfbasis_Vee.dV(Fn, Fv);
+        }
       }
 
       // std::cout << "<" << Fw.kappa() << "|d|" << Fn.kappa() << "> = " << d_wn
@@ -537,7 +527,11 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
       double d_nv = E1.fullME(Fn, Fv);
 
       if (tdhf) {
-        V_wn += VeeOp.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_Vee.dV(Fw, Fn);
+        if (wf.Znuc() < 55) {
+          V_wn += VeeOp.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_Vee.dV(Fw, Fn);
+        } else {
+          V_wn += VeeOp.rme3js(Fw.twoj(), Fn.twoj()) * tdhfbasis_Vee.dV(Fw, Fn);
+        }
         d_nv += E1.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_d.dV(Fn, Fv);
       }
 
