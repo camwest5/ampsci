@@ -493,7 +493,8 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
   DiracOperator::Vee VeeOp(wf.core(), contact, mu, type, eN);
   DiracOperator::E1 E1(wf.grid());
 
-  ExternalField::DiagramRPA diagrpa_Vee(&VeeOp, wf.basis(), wf.vHF(), "Cs");
+  ExternalField::DiagramRPA diagrpa_Vee(&VeeOp, wf.basis(), wf.vHF(),
+                                        wf.atomicSymbol());
   ExternalField::TDHF tdhf_d(&E1, wf.vHF());
 
   if (tdhf) {
