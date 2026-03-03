@@ -493,21 +493,13 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
   DiracOperator::Vee VeeOp(wf.core(), contact, mu, type, eN);
   DiracOperator::E1 E1(wf.grid());
 
-  ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
-  // ExternalField::TDHFbasis tdhfbasis_Vee(&VeeOp, wf.vHF(), wf.basis());
-
-  ExternalField::DiagramRPA tdhfbasis_Vee(&VeeOp, wf.basis(), wf.vHF());
+  ExternalField::DiagramRPA diagrpa_Vee(&VeeOp, wf.basis(), wf.vHF(), "Cs");
   ExternalField::TDHF tdhf_d(&E1, wf.vHF());
 
   if (tdhf) {
     std::cout << "\nμ = " << mu << "\n";
     tdhf_d.solve_core(omega, 100, true);
-
-    if (wf.Znuc() < 1) {
-      tdhf_Vee.solve_core(omega, 100, true);
-    } else {
-      tdhfbasis_Vee.solve_core(omega, 1, true);
-    }
+    diagrpa_Vee.solve_core(omega, 100, true);
   }
 
   for (auto Fn : wf.basis()) {
@@ -532,12 +524,7 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
 
       if (tdhf) {
         d_wn += E1.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_d.dV(Fw, Fn);
-
-        if (wf.Znuc() < 1) {
-          V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_Vee.dV(Fn, Fv);
-        } else {
-          V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhfbasis_Vee.dV(Fn, Fv);
-        }
+        V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * diagrpa_Vee.dV(Fn, Fv);
       }
 
       // std::cout << "<" << Fw.kappa() << "|d|" << Fn.kappa() << "> = " << d_wn
@@ -556,11 +543,7 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
       double d_nv = E1.fullME(Fn, Fv);
 
       if (tdhf) {
-        if (wf.Znuc() < 55) {
-          V_wn += VeeOp.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_Vee.dV(Fw, Fn);
-        } else {
-          V_wn += VeeOp.rme3js(Fw.twoj(), Fn.twoj()) * tdhfbasis_Vee.dV(Fw, Fn);
-        }
+        V_wn += VeeOp.rme3js(Fw.twoj(), Fn.twoj()) * diagrpa_Vee.dV(Fw, Fn);
         d_nv += E1.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_d.dV(Fn, Fv);
       }
 
@@ -590,6 +573,7 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
       // std::cout << "\n" << VeeOp.fullME(Fv, Fn) << "\t" << VeeOp.fullME(Fn, Fv);
     }
   }
+  // Multiply by hbar c in au:
   return D_wv / PhysConst::alpha;
 }
 
