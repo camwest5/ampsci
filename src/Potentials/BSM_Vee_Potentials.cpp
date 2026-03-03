@@ -42,8 +42,8 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const bool eN,
     // for (int twok = std::abs(Fa.twoj() - Fv.twoj());
     //      twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
 
-    const auto phase = Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) *
-                       (1.0 / (4 * M_PI * Fv.twojp1()));
+    const auto phase =
+        Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) * (1.0 / (Fv.twojp1()));
 
     for (int k = 0; k <= Fa.twoj() + Fv.twoj(); ++k) {
 
@@ -81,7 +81,7 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const bool eN,
     mu_factor = mu;
   }
 
-  return mu_factor * VFv;
+  return (mu_factor / (4 * M_PI)) * VFv;
 }
 
 DiracSpinor Bk_ab_v(const int k, const bool contact, const double mu,
