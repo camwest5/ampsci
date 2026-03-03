@@ -428,7 +428,7 @@ double calc_Vwv(const std::string type, const bool contact, const double mu,
                 const bool tdhf, const double omega, const Wavefunction &wf,
                 const DiracSpinor &Fw, const DiracSpinor &Fv) {
 
-  DiracOperator::Vee VeeOp(wf.core(), contact, mu, type);
+  DiracOperator::Vee VeeOp(wf.core(), contact, mu, type, false);
 
   if (tdhf) {
     ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
@@ -480,23 +480,33 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
                 const bool tdhf, const double omega, const Wavefunction &wf,
                 const DiracSpinor &Fw, const DiracSpinor &Fv) {
   // std::cout << "In test mode";
+
+  // For testing - normally false
+  const bool eN = false;
+
+  if (eN) {
+    std::cout << "\nWARNING: Calculating 'eN' rather than 'ee' - results are "
+                 "not robust.\n";
+  }
+
   double D_wv = 0.0;
-  DiracOperator::Vee VeeOp(wf.core(), contact, mu, type);
+  DiracOperator::Vee VeeOp(wf.core(), contact, mu, type, eN);
   DiracOperator::E1 E1(wf.grid());
 
   ExternalField::TDHF tdhf_Vee(&VeeOp, wf.vHF());
-  ExternalField::TDHFbasis tdhfbasis_Vee(&VeeOp, wf.vHF(), wf.basis());
+  // ExternalField::TDHFbasis tdhfbasis_Vee(&VeeOp, wf.vHF(), wf.basis());
 
+  ExternalField::DiagramRPA tdhfbasis_Vee(&VeeOp, wf.basis(), wf.vHF());
   ExternalField::TDHF tdhf_d(&E1, wf.vHF());
 
   if (tdhf) {
     std::cout << "\nμ = " << mu << "\n";
     tdhf_d.solve_core(omega, 100, true);
 
-    if (wf.Znuc() < 55) {
+    if (wf.Znuc() < 1) {
       tdhf_Vee.solve_core(omega, 100, true);
     } else {
-      tdhfbasis_Vee.solve_core(omega, 100, true);
+      tdhfbasis_Vee.solve_core(omega, 1, true);
     }
   }
 
@@ -523,7 +533,7 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
       if (tdhf) {
         d_wn += E1.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_d.dV(Fw, Fn);
 
-        if (wf.Znuc() < 55) {
+        if (wf.Znuc() < 1) {
           V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_Vee.dV(Fn, Fv);
         } else {
           V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * tdhfbasis_Vee.dV(Fn, Fv);

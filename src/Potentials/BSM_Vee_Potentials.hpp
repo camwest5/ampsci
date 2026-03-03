@@ -5,9 +5,10 @@
 #include "Wavefunction/Wavefunction.hpp"
 
 namespace BSM_Vee {
-DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
-                 const std::string type, const int kappa_n, const double y,
-                 const bool contact, const double mu);
+DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const bool eN,
+                 const DiracSpinor &Fv, const std::string type,
+                 const int kappa_n, const double y, const bool contact,
+                 const double mu);
 DiracSpinor Bk_ab_v(const int k, const bool contact, const double mu,
                     const bool betaalpha, const std::string type,
                     const DiracSpinor &Fa, const DiracSpinor &Fc,

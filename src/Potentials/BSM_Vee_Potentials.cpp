@@ -6,9 +6,10 @@
 
 namespace BSM_Vee {
 
-DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
-                 const std::string type, const int kappa_n, const double y,
-                 const bool contact, const double mu) {
+DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const bool eN,
+                 const DiracSpinor &Fv, const std::string type,
+                 const int kappa_n, const double y, const bool contact,
+                 const double mu) {
   if ((type != "sp") && (type != "va") && (type != "ss") && (type != "vv")) {
     std::cout << "\n\n*****ONLY type = sp, va, ss or vv SUPPORTED*****";
     return 0.0 * Fv;
@@ -21,6 +22,16 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const DiracSpinor &Fv,
     return 0.0 * Fv;
   }
 
+  // For eN (testing sign)
+  if (eN) {
+
+    const auto VFv_radial = g0(g5(Fv));
+    double VFv_angular = 1.0;
+
+    return VFv_radial * VFv_angular;
+  }
+
+  // For ee
   for (auto Fa : core) {
 
     const auto Fdir =
