@@ -493,14 +493,14 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
   DiracOperator::Vee VeeOp(wf.core(), contact, mu, type, eN);
   DiracOperator::E1 E1(wf.grid());
 
-  ExternalField::DiagramRPA diagrpa_Vee(&VeeOp, wf.basis(), wf.vHF(),
-                                        wf.atomicSymbol());
+  ExternalField::DiagramRPA drpa_Vee(&VeeOp, wf.basis(), wf.vHF(),
+                                     wf.atomicSymbol());
   ExternalField::TDHF tdhf_d(&E1, wf.vHF());
 
   if (tdhf) {
     std::cout << "\nμ = " << mu << "\n";
     tdhf_d.solve_core(omega, 100, true);
-    diagrpa_Vee.solve_core(omega, 100, true);
+    drpa_Vee.solve_core(omega, 100, true);
   }
 
   for (auto Fn : wf.basis()) {
@@ -525,7 +525,7 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
 
       if (tdhf) {
         d_wn += E1.rme3js(Fw.twoj(), Fn.twoj()) * tdhf_d.dV(Fw, Fn);
-        V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * diagrpa_Vee.dV(Fn, Fv);
+        V_nv += VeeOp.rme3js(Fn.twoj(), Fv.twoj()) * drpa_Vee.dV(Fn, Fv);
       }
 
       // std::cout << "<" << Fw.kappa() << "|d|" << Fn.kappa() << "> = " << d_wn
@@ -544,7 +544,7 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
       double d_nv = E1.fullME(Fn, Fv);
 
       if (tdhf) {
-        V_wn += VeeOp.rme3js(Fw.twoj(), Fn.twoj()) * diagrpa_Vee.dV(Fw, Fn);
+        V_wn += VeeOp.rme3js(Fw.twoj(), Fn.twoj()) * drpa_Vee.dV(Fw, Fn);
         d_nv += E1.rme3js(Fn.twoj(), Fv.twoj()) * tdhf_d.dV(Fn, Fv);
       }
 

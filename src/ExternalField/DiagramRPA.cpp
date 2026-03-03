@@ -12,6 +12,7 @@
 #include "Wavefunction/DiracSpinor.hpp"
 #include <algorithm>
 #include <numeric>
+#include <omp.h>
 #include <string>
 #include <vector>
 
@@ -110,7 +111,15 @@ bool DiagramRPA::read_write(const std::string &fname, IO::FRW::RoW rw) {
         << "\nNote: still uses Basis for summation (only reads in W matrix)\n";
 
   std::fstream iofs;
-  IO::FRW::open_binary(iofs, fname, rw);
+
+  if (omp_in_parallel()) {
+#pragma omp critical
+    {
+      IO::FRW::open_binary(iofs, fname, rw);
+    }
+  } else {
+    IO::FRW::open_binary(iofs, fname, rw);
+  }
 
   if (holes.empty() || excited.empty()) {
     return false;
@@ -154,7 +163,7 @@ bool DiagramRPA::read_write(const std::string &fname, IO::FRW::RoW rw) {
   std::cout << "done.\n";
 
   return true;
-}
+} // namespace ExternalField
 
 //==============================================================================
 void DiagramRPA::fill_W_matrix(const DiracOperator::TensorOperator *const h) {
