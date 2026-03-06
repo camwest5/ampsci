@@ -14,6 +14,11 @@ DiracSpinor Bk_ab_v(const int k, const bool contact, const double mu,
                     const DiracSpinor &Fa, const DiracSpinor &Fc,
                     const DiracSpinor &Fv);
 
+double u_anav_contact(const Wavefunction &wf, const DiracSpinor &Fn,
+                      const DiracSpinor &Fa, const DiracSpinor &Fv);
+double u_anva_contact(const Wavefunction &wf, const DiracSpinor &Fn,
+                      const DiracSpinor &Fa, const DiracSpinor &Fv);
+
 DiracSpinor g0(const DiracSpinor &Fa);
 DiracSpinor g5(const DiracSpinor &Fa);
 DiracSpinor old_ig5(const DiracSpinor &Fa);

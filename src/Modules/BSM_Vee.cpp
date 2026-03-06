@@ -308,6 +308,32 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
   // std::vector<double> i0_maxs;
   // std::vector<double> k0_maxs;
 
+  const auto Fn = wf.valence()[1];
+  std::cout << "\n\nTESTING MATRIX ELEMENTS\n\n";
+
+  double ME_manual_contact = 0.0;
+
+  for (auto Fn : wf.basis()) {
+
+    for (auto Fa : wf.core()) {
+      const auto Fdir = BSM_Vee::u_anav_contact(wf, Fn, Fa, Fv);
+      const auto Fexch = BSM_Vee::u_anva_contact(wf, Fn, Fa, Fv);
+
+      if ((Fdir != 0.0) && (Fexch != 0.0)) {
+        std::cout << "Fn=" << Fn.shortSymbol() << "\tFv=" << Fv.shortSymbol()
+                  << "\tFa=" << Fa.shortSymbol() << "\n";
+
+        std::cout << "Fdir  = " << Fdir << "\n";
+        std::cout << "2Fexch = " << 2 * Fexch << "\n";
+        std::cout << "Fdir - Fexch = " << Fdir - Fexch << "\n";
+        std::cout << "2Fdir = " << 2 * Fdir << "\n\n";
+
+        ME_manual_contact += Fdir - Fexch;
+      }
+    }
+  }
+  std::cout << "\nFinal result for contact lim: " << ME_manual_contact << "\n";
+
   if (tdhf) {
     std::cout << "\nRunning TDHF.\n";
   } else {

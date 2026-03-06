@@ -67,7 +67,7 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const bool eN,
 
       Fexch += phase * twokp1 * (Fexch_AB + Fexch_BA);
     }
-    VFv += y * Fdir - (2 - y) * Fexch;
+    VFv += Fdir - Fexch;
     // VFv += 2.0 * Fdir;
   }
 
@@ -179,6 +179,86 @@ DiracSpinor g5(const DiracSpinor &Fa) {
   Fb.f() = Fa.g();
   Fb.g() = Fa.f();
   return Fb;
+}
+
+// Contact limit only, includes VA and AV (zero)
+double u_anav_contact(const Wavefunction &wf, const DiracSpinor &Fn,
+                      const DiracSpinor &Fa, const DiracSpinor &Fv) {
+
+  const auto gr = wf.grid();
+  // Radial part
+  std::vector<double> B_aa(gr.size());
+  for (int i = 0; i < B_aa.size(); ++i) {
+    const double inv_r2 = 1.0 / (gr.r(i) * gr.r(i));
+    const double ff_gg = Fa.f(i) * Fa.f(i) + Fa.g(i) * Fa.g(i);
+    B_aa[i] = inv_r2 * ff_gg;
+  }
+
+  DiracSpinor modFv(Fv);
+  modFv.f() = Fv.g();
+  modFv.g() = (-1.0 * Fv).f();
+
+  const double R_anav = Fn * (B_aa * modFv);
+
+  // Angular part
+  const double A_factor =
+      (1.0 / (4 * M_PI)) * sqrt(Fa.twojp1() * (1.0 / Fv.twojp1()));
+  const double A_cc = Angular::Ck_kk(0, Fa.kappa(), Fa.kappa()) *
+                      Angular::Ck_kk(0, Fn.kappa(), -Fv.kappa());
+
+  return A_factor * A_cc * R_anav;
+}
+
+// Contact limit only, includes VA and AV
+double u_anva_contact(const Wavefunction &wf, const DiracSpinor &Fn,
+                      const DiracSpinor &Fa, const DiracSpinor &Fv) {
+
+  const auto gr = wf.grid();
+
+  // in VA: g5 on 'a'
+  // In AV: g5 on 'v'
+
+  // Radial part
+  std::vector<double> B_av_VA(gr.size());
+  std::vector<double> B_na_AV(gr.size());
+  for (int i = 0; i < gr.size(); ++i) {
+    const double inv_r2 = 1.0 / (gr.r(i) * gr.r(i));
+
+    const double ff_gg_VA = Fa.f(i) * Fv.f(i) + Fa.g(i) * Fv.g(i);
+    const double ff_gg_AV = Fn.f(i) * Fa.f(i) + Fn.g(i) * Fa.g(i);
+
+    B_av_VA[i] = inv_r2 * ff_gg_VA;
+    B_na_AV[i] = inv_r2 * ff_gg_AV;
+  }
+
+  DiracSpinor modFa_VA(Fa);
+  modFa_VA.f() = Fa.g();
+  modFa_VA.g() = (-1.0 * Fa).f();
+
+  DiracSpinor modFv_AV(Fv);
+  modFv_AV.f() = Fv.g();
+  modFv_AV.g() = (-1.0 * Fv).f();
+
+  const double R_anva_VA = Fn * (B_av_VA * modFa_VA);
+  const double R_anva_AV = Fa * (B_na_AV * modFv_AV);
+
+  // Angular part
+  const double A_factor =
+      Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) / (4 * M_PI * Fv.twojp1());
+
+  double kA_cc_VA = 0;
+  double kA_cc_AV = 0;
+
+  for (int k = 0; k <= 0.5 * (Fa.twoj() + Fv.twoj()); ++k) {
+    const int twokp1 = 2 * k + 1;
+    kA_cc_VA += twokp1 * Angular::Ck_kk(k, Fn.kappa(), -Fa.kappa()) *
+                Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+
+    kA_cc_AV += twokp1 * Angular::Ck_kk(k, Fn.kappa(), Fa.kappa()) *
+                Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa());
+  }
+
+  return A_factor * (kA_cc_VA * R_anva_VA + kA_cc_AV * R_anva_AV);
 }
 
 DiracSpinor old_ig5(const DiracSpinor &Fa) {
