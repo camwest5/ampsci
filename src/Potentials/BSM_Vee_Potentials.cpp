@@ -28,7 +28,12 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const bool eN,
     const auto VFv_radial = g0(g5(Fv));
     double VFv_angular = 1.0;
 
-    return VFv_radial * VFv_angular;
+    // Only for Caesium!
+    const auto c = Nuclear::c_hdr_formula_rrms_t(Nuclear::find_rrms(55, 133));
+    const auto t = Nuclear::default_t;
+    const auto rho = Nuclear::fermiNuclearDensity_tcN(t, c, 55, Fv.grid());
+
+    return rho * VFv_radial * VFv_angular;
   }
 
   // For ee
@@ -45,7 +50,7 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const bool eN,
     const auto phase =
         Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) * (1.0 / (Fv.twojp1()));
 
-    for (int k = 0; k <= Fa.twoj() + Fv.twoj(); ++k) {
+    for (int k = 0; k <= 0.5 * (Fa.twoj() + Fv.twoj()); ++k) {
 
       // const double k = 0.5 * twok;
       const auto twok = 2.0 * k;
