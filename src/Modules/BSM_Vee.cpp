@@ -60,7 +60,7 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const double min_mu = input.get<double>("min_mu", 1.0e-4);
   const double max_mu = input.get<double>("max_mu", 1.0e4);
-  const double N_mu = input.get<double>("N_mu", 100.0);
+  const int N_mu = input.get<int>("N_mu", 100);
   const bool contact = input.get<bool>("contact", false);
   const bool tdhf = input.get<bool>("tdhf", false);
   const double omega = input.get<double>("omega", 0.0);
@@ -227,7 +227,7 @@ double dE(const double mu, const std::string int_type,
     for (int twok = std::abs(Fa.twoj() - Fv.twoj());
          twok <= Fa.twoj() + Fv.twoj(); twok += 2) {
       if ((Fa.twoj() + Fv.twoj() + twok) % 4 == 0) {
-        const int k = twok * 0.5;
+        const int k = round(twok / 2);
         R_vaav = Rk_abcd(k, mu, Fv, Fa, Fa, Fv, int_type);
         A_vaav = (2.0 * k + 1) * Angular::Ck_kk(k, Fv.kappa(), Fa.kappa()) *
                  Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
@@ -312,27 +312,274 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
   std::cout << "\n\nTESTING MATRIX ELEMENTS\n\n";
 
   double ME_manual_contact = 0.0;
+  double ME_operator_contact = 0.0;
 
   for (auto Fn : wf.basis()) {
 
     for (auto Fa : wf.core()) {
+
       const auto Fdir = BSM_Vee::u_anav_contact(wf, Fn, Fa, Fv);
       const auto Fexch = BSM_Vee::u_anva_contact(wf, Fn, Fa, Fv);
 
-      if ((Fdir != 0.0) && (Fexch != 0.0)) {
+      const auto Rdir_VA = BSM_Vee::R_AV_abcd(Fa, Fn, Fa, Fv);
+      const auto Rdir_AV = BSM_Vee::R_AV_abcd(Fn, Fa, Fv, Fa);
+      const auto Rexch_VA = BSM_Vee::R_AV_abcd(Fa, Fn, Fv, Fa);
+      const auto Rexch_AV = BSM_Vee::R_AV_abcd(Fn, Fa, Fa, Fv);
+
+      const auto Adir =
+          (Rdir_AV + Rdir_VA) != 0 ? Fdir / (Rdir_AV + Rdir_VA) : 0.0;
+      const auto Aexch =
+          (Rexch_AV + Rexch_VA) != 0 ? Fexch / (Rexch_AV + Rexch_VA) : 0.0;
+
+      if ((Fdir != 0.0) || (Fexch != 0.0)) {
+        std::cout << "__________________________\n";
         std::cout << "Fn=" << Fn.shortSymbol() << "\tFv=" << Fv.shortSymbol()
                   << "\tFa=" << Fa.shortSymbol() << "\n";
 
-        std::cout << "Fdir  = " << Fdir << "\n";
-        std::cout << "2Fexch = " << 2 * Fexch << "\n";
-        std::cout << "Fdir - Fexch = " << Fdir - Fexch << "\n";
-        std::cout << "2Fdir = " << 2 * Fdir << "\n\n";
+        std::cout << "   Rdir_VA = " << Rdir_VA << "\n";
+        std::cout << "   Rdir_AV = " << Rdir_AV << "\n";
+        std::cout << "  Rexch_VA = " << Rexch_VA << "\n";
+        std::cout << "  Rexch_AV = " << Rexch_AV << "\n\n";
+
+        std::cout << "      Rdir = " << Rdir_AV + Rdir_VA << "\n";
+        std::cout << "     Rexch = " << Rexch_AV + Rexch_VA << "\n";
+        std::cout << "Rdir/Rexch = "
+                  << (Rdir_AV + Rdir_VA) / (Rexch_AV + Rexch_VA) << "\n\n";
+
+        std::cout << "   4π*Adir = " << 4 * M_PI * Adir << "\n";
+        std::cout << "  4π*Aexch = " << 4 * M_PI * Aexch << "\n";
+        std::cout << "Adir/Aexch = " << Adir / Aexch << "\n\n";
+
+        std::cout << "      Vdir = " << Fdir << "\n";
+        std::cout << "    2Vexch = " << 2 * Fexch << "\n";
+        std::cout << "Vdir/Vexch = " << Fdir / Fexch << "  (-1?)\n\n";
+
+        std::cout << "Vdir-Vexch = " << Fdir - Fexch << "\n";
+        std::cout << "     2Vdir = " << 2 * Fdir << "\n";
 
         ME_manual_contact += Fdir - Fexch;
       }
     }
+
+    ME_operator_contact += Fn * BSM_Vee::V_Fv(wf.core(), false, Fv, "va",
+                                              Fn.kappa(), 1.0, true, 1.0);
   }
-  std::cout << "\nFinal result for contact lim: " << ME_manual_contact << "\n";
+  std::cout << "\nFinal result for contact lim: " << ME_manual_contact;
+  std::cout << "\n              Using operator: " << ME_operator_contact
+            << "\n";
+
+  std::cout << "\nAngular integrals with Fv = " << Fv.shortSymbol() << "\n\n";
+  std::cout << " Red = diag * (-1)^k * [k] * <a||Ck||c> * <b||Ck||d>\n";
+  std::cout << "Full =        (-1)^q * [k] * <a|Ck|c>  *  <b|Ck|d>\n";
+  std::cout << "Dir VA: abcd -> nav(-a)\n";
+  std::cout << "Dir AV: abcd -> na(-v)a\n";
+  std::cout << "Exc VA: abcd -> naa(-v)\n";
+  std::cout << "Exc AV: abcd -> na(-a)v\n\n";
+
+  std::cout << "           Dir VA    Dir AV    Exc VA    Exc AV\n";
+  std::cout << " Fn  Fa   Red Full  Red Full  Red Full  Red Full\n";
+
+  // Check angular diagrams
+
+  for (auto Fn : wf.basis()) {
+    const int tmv = std::min(Fv.twoj(), Fn.twoj());
+    for (auto Fa : wf.core()) {
+      const auto A_direct_AV = std::sqrt(Fa.twojp1() * (1.0 / Fv.twojp1())) *
+                               Angular::Ck_kk(0, Fn.kappa(), -Fv.kappa()) *
+                               Angular::Ck_kk(0, Fa.kappa(), Fa.kappa());
+
+      const auto A_direct_VA = std::sqrt(Fa.twojp1() * (1.0 / Fv.twojp1())) *
+                               Angular::Ck_kk(0, Fn.kappa(), Fv.kappa()) *
+                               Angular::Ck_kk(0, Fa.kappa(), -Fa.kappa());
+
+      double A_exch_VA = 0;
+      double A_exch_AV = 0;
+
+      // Manual sum
+      double A_direct_man_AV = 0;
+      double A_direct_man_VA = 0;
+      double A_exch_man_VA = 0;
+      double A_exch_man_AV = 0;
+      for (int k = 0; k <= (Fv.twoj() + Fa.twoj()); ++k) {
+
+        const auto A_cc_VA = Angular::Ck_kk(k, Fn.kappa(), Fa.kappa()) *
+                             Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa());
+        const auto A_cc_AV = Angular::Ck_kk(k, Fn.kappa(), -Fa.kappa()) *
+                             Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+
+        const auto exch_factor = Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) *
+                                 (k * 2 + 1) * (1.0 / Fv.twojp1());
+
+        const auto delta = Fv.twoj() == Fn.twoj() ? 1.0 : 0.0;
+
+        A_exch_VA += A_cc_VA * exch_factor * delta;
+        A_exch_AV += A_cc_AV * exch_factor * delta;
+
+        for (int tq = -2 * k; tq <= 2 * k; tq += 2) {
+          for (int tma = -Fa.twoj(); tma <= Fa.twoj(); tma += 2) {
+            for (int tmn = -Fn.twoj(); tmn <= Fn.twoj(); tmn += 2) {
+              const auto factor = Angular::neg1pow_2(tq) * (2 * k + 1);
+              const auto dir_CC_AV =
+                  Angular::Ck_kk_mmq(k, Fn.kappa(), -Fv.kappa(), tmn, tmv, tq) *
+                  Angular::Ck_kk_mmq(k, Fa.kappa(), Fa.kappa(), tma, tma, -tq);
+
+              const auto dir_CC_VA =
+                  Angular::Ck_kk_mmq(k, Fn.kappa(), Fv.kappa(), tmn, tmv, tq) *
+                  Angular::Ck_kk_mmq(k, Fa.kappa(), -Fa.kappa(), tma, tma, -tq);
+
+              const auto exch_CC_AV =
+                  Angular::Ck_kk_mmq(k, Fn.kappa(), -Fa.kappa(), tmn, tma, tq) *
+                  Angular::Ck_kk_mmq(k, Fa.kappa(), Fv.kappa(), tma, tmv, -tq);
+
+              const auto exch_CC_VA =
+                  Angular::Ck_kk_mmq(k, Fn.kappa(), Fa.kappa(), tmn, tma, tq) *
+                  Angular::Ck_kk_mmq(k, Fa.kappa(), -Fv.kappa(), tma, tmv, -tq);
+
+              A_direct_man_AV += factor * dir_CC_AV;
+              A_direct_man_VA += factor * dir_CC_VA;
+              A_exch_man_VA += factor * exch_CC_VA;
+              A_exch_man_AV += factor * exch_CC_AV;
+            }
+          }
+        }
+      }
+
+      // Tabular
+      if ((Fn < Fv) &&
+          (abs(A_direct_AV) + abs(A_direct_man_AV) + abs(A_exch_AV) +
+               abs(A_exch_man_VA) + abs(A_exch_AV) + abs(A_exch_man_AV) >
+           1e-10)) {
+
+        A_direct_man_VA = A_direct_man_VA > 1e-10 ? A_direct_man_VA : 0.0;
+        std::cout << Fn.shortSymbol() << " " << Fa.shortSymbol() << "     "
+                  << A_direct_VA << "    " << A_direct_man_VA << " |  "
+                  << A_direct_AV << "    " << A_direct_man_AV << " |  "
+                  << A_exch_VA << "    " << A_exch_man_VA << " |  " << A_exch_AV
+                  << "    " << A_exch_man_AV << "\n";
+      }
+
+      // // Pretty for each state
+      // if (A_exch_man_AV > 0.001) {
+      //   std::cout << "_____________________________";
+      //   std::cout << "\nAngular integrals with Fn=" << Fn.shortSymbol()
+      //             << " Fv=" << Fv.shortSymbol() << " Fa=" << Fa.shortSymbol()
+      //             << "\n";
+      //   std::cout << "     Direct reduced: " << A_direct << "\n";
+      //   std::cout << "        Direct full: " << A_direct_man << "\n\n";
+      //   std::cout << "VA Exchange reduced: " << A_exch_VA << "\n";
+      //   std::cout << "   VA Exchange full: " << A_exch_man_VA << "\n\n";
+      //   std::cout << "AV Exchange reduced: " << A_exch_AV << "\n";
+      //   std::cout << "   AV Exchange full: " << A_exch_man_AV << "\n";
+      //   sleep(1);
+      // }
+    }
+  }
+
+  std::cout << "\n\nChecking individual multipoles k\n";
+  std::cout << "               Dir VA    Dir AV    Exc VA    Exc AV\n";
+  std::cout << " Fn  Fa  k    Red Full  Red Full  Red Full  Red Full\n";
+
+  // Check angular diagrams
+
+  for (auto Fn : wf.basis()) {
+    const int tmv = std::min(Fv.twoj(), Fn.twoj());
+    for (auto Fa : wf.core()) {
+      auto A_direct_AV = std::sqrt(Fa.twojp1() * (1.0 / Fv.twojp1())) *
+                         Angular::Ck_kk(0, Fn.kappa(), -Fv.kappa()) *
+                         Angular::Ck_kk(0, Fa.kappa(), Fa.kappa());
+
+      auto A_direct_VA = std::sqrt(Fa.twojp1() * (1.0 / Fv.twojp1())) *
+                         Angular::Ck_kk(0, Fn.kappa(), Fv.kappa()) *
+                         Angular::Ck_kk(0, Fa.kappa(), -Fa.kappa());
+
+      for (int k = 0; k <= (Fv.twoj() + Fa.twoj()); ++k) {
+        A_direct_AV = k == 0 ? A_direct_AV : 0;
+        A_direct_VA = k == 0 ? A_direct_VA : 0;
+
+        double A_exch_VA = 0;
+        double A_exch_AV = 0;
+
+        // Manual sum
+        double A_direct_man_AV = 0;
+        double A_direct_man_VA = 0;
+        double A_exch_man_VA = 0;
+        double A_exch_man_AV = 0;
+
+        const auto A_cc_VA = Angular::Ck_kk(k, Fn.kappa(), Fa.kappa()) *
+                             Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa());
+        const auto A_cc_AV = Angular::Ck_kk(k, Fn.kappa(), -Fa.kappa()) *
+                             Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+
+        const auto exch_factor = Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) *
+                                 (k * 2 + 1) * (1.0 / Fv.twojp1());
+
+        const auto delta = Fv.twoj() == Fn.twoj() ? 1.0 : 0.0;
+
+        A_exch_VA += A_cc_VA * exch_factor * delta;
+        A_exch_AV += A_cc_AV * exch_factor * delta;
+
+        for (int tq = -2 * k; tq <= 2 * k; tq += 2) {
+          for (int tma = -Fa.twoj(); tma <= Fa.twoj(); tma += 2) {
+            for (int tmn = -Fn.twoj(); tmn <= Fn.twoj(); tmn += 2) {
+              const auto factor = Angular::neg1pow_2(tq) * (2 * k + 1);
+              const auto dir_CC_AV =
+                  Angular::Ck_kk_mmq(k, Fn.kappa(), -Fv.kappa(), tmn, tmv, tq) *
+                  Angular::Ck_kk_mmq(k, Fa.kappa(), Fa.kappa(), tma, tma, -tq);
+
+              const auto dir_CC_VA =
+                  Angular::Ck_kk_mmq(k, Fn.kappa(), Fv.kappa(), tmn, tmv, tq) *
+                  Angular::Ck_kk_mmq(k, Fa.kappa(), -Fa.kappa(), tma, tma, -tq);
+
+              const auto exch_CC_AV =
+                  Angular::Ck_kk_mmq(k, Fn.kappa(), -Fa.kappa(), tmn, tma, tq) *
+                  Angular::Ck_kk_mmq(k, Fa.kappa(), Fv.kappa(), tma, tmv, -tq);
+
+              // // DIY exch_CC_AV
+              // const auto exch_na_AV =
+              //     Angular::neg1pow_2(Fn.twoj() - tmn) *
+              //     Angular::threej_2(Fn.twoj(), 2 * k, Fa.twoj(), -tmn, tq,
+              //                       tma) *
+              //     Angular::Ck_kk(k, Fn.kappa(), -Fa.kappa());
+
+              // const auto exch_av_AV =
+              //     Angular::neg1pow_2(Fa.twoj() - tma) *
+              //     Angular::threej_2(Fa.twoj(), 2 * k, Fv.twoj(), -tma, -tq,
+              //                       tmv) *
+              //     Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+
+              // const auto exch_CC_AV = exch_na_AV * exch_av_AV;
+
+              const auto exch_CC_VA =
+                  Angular::Ck_kk_mmq(k, Fn.kappa(), Fa.kappa(), tmn, tma, tq) *
+                  Angular::Ck_kk_mmq(k, Fa.kappa(), -Fv.kappa(), tma, tmv, -tq);
+
+              A_direct_man_AV += factor * dir_CC_AV;
+              A_direct_man_VA += factor * dir_CC_VA;
+              A_exch_man_VA += factor * exch_CC_VA;
+              A_exch_man_AV += factor * exch_CC_AV;
+            }
+          }
+        }
+
+        // Tabular
+        if ((Fn < Fv) &&
+            (abs(A_direct_AV) + abs(A_direct_man_AV) + abs(A_exch_AV) +
+                 abs(A_exch_man_VA) + abs(A_exch_AV) + abs(A_exch_man_AV) >
+             1e-10)) {
+          A_direct_man_VA = A_direct_man_VA > 1e-10 ? A_direct_man_VA : 0.0;
+          std::cout << Fn.shortSymbol() << " " << Fa.shortSymbol() << "  " << k
+                    << "     " << A_direct_VA << "    " << A_direct_man_VA
+                    << " |  " << A_direct_AV << "    " << A_direct_man_AV
+                    << " |  " << A_exch_VA << "    " << A_exch_man_VA << " |  "
+                    << A_exch_AV << "    " << A_exch_man_AV << "\n";
+
+          if (k >= 0.5 * (Fv.twoj() + Fa.twoj())) {
+            std::cout << "\n";
+          }
+        }
+      }
+    }
+  }
 
   if (tdhf) {
     std::cout << "\nRunning TDHF.\n";
