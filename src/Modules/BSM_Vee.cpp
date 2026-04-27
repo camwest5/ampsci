@@ -48,10 +48,13 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 
   const bool test = input.get<bool>("test", false);
+
   if (test) {
     // sp_tdhf(input, wf);
     // return;
     std::cout << "\n***Using V_SP operator (test mode)***\n";
+    find_fierz(input, wf);
+    return;
   }
 
   const auto e_handler = gsl_set_error_handler_off();
@@ -117,6 +120,94 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
 
   // Cleanup
   gsl_set_error_handler(e_handler);
+}
+
+void find_fierz(const IO::InputBlock &input, const Wavefunction &wf) {
+
+  // Check some random angular identities
+
+  // const int kappa_v = -1;
+  // const int kappa_n = 1;
+
+  const auto Fv = wf.valence()[0];
+  const auto Fn = wf.valence()[2];
+  const auto Fa = wf.core()[0];
+
+  if (Fn.kappa() != -Fv.kappa()) {
+    throw "κn != -κv";
+  }
+
+  std::cout << "\nUsing v = " << Fv.symbol() << ", n = " << Fn.symbol()
+            << ", a = " << Fa.symbol();
+
+  std::cout << "\n\nCHECKING ANGULAR CONTRIBUTIONS\n";
+
+  const auto A_VA_dir = std::sqrt(Fa.twojp1() * (1.0 / Fv.twojp1())) *
+                        Angular::Ck_kk(0, Fn.kappa(), Fv.kappa()) *
+                        Angular::Ck_kk(0, Fa.kappa(), -Fa.kappa());
+
+  const auto A_AV_dir = std::sqrt(Fa.twojp1() * (1.0 / Fv.twojp1())) *
+                        Angular::Ck_kk(0, Fn.kappa(), -Fv.kappa()) *
+                        Angular::Ck_kk(0, Fa.kappa(), Fa.kappa());
+
+  std::cout << "\nVA direct: " << A_VA_dir;
+  std::cout << "\nAV direct: " << A_AV_dir;
+
+  std::cout << "\n\nSumming for VA exchange: \n";
+
+  double A_VA_exch = 0;
+  for (int k = 0; k < 6; ++k) {
+    if (k > 0) {
+      std::cout << " + ";
+    }
+    const auto factor = (2 * k + 1) *
+                        Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) *
+                        (1.0 / Fv.twojp1());
+    const auto contribution = factor *
+                              Angular::Ck_kk(k, Fn.kappa(), Fa.kappa()) *
+                              Angular::Ck_kk(k, Fa.kappa(), -Fv.kappa());
+    std::cout << contribution;
+
+    A_VA_exch += contribution;
+  }
+  std::cout << "\nVA exchange: " << A_VA_exch;
+
+  std::cout << "\n\nSumming for AV exchange: \n";
+
+  double A_AV_exch = 0;
+  for (int k = 0; k < 6; ++k) {
+    if (k > 0) {
+      std::cout << " + ";
+    }
+    const auto factor = (2 * k + 1) *
+                        Angular::neg1pow_2(Fv.twoj() - Fa.twoj()) *
+                        (1.0 / Fv.twojp1());
+    const auto contribution = factor *
+                              Angular::Ck_kk(k, Fn.kappa(), -Fa.kappa()) *
+                              Angular::Ck_kk(k, Fa.kappa(), Fv.kappa());
+    std::cout << contribution;
+
+    A_AV_exch += contribution;
+  }
+  std::cout << "\nAV exchange: " << A_AV_exch;
+
+  // std::cout << "\n\nVA + AV   direct: " << A_VA_dir + A_AV_dir;
+  // std::cout << "\nVA + AV exchange: " << A_VA_exch + A_AV_exch;
+
+  // Check the radial
+  std::cout << "\n\nCHECKING RADIAL CONTRIBUTIONS\n";
+
+  // Do it manually? Seems to work out with what I've got.
+
+  const auto R_VA_nava = BSM_Vee::R_AV_abcd(Fa, Fn, Fa, Fv);
+  const auto R_AV_nava = BSM_Vee::R_AV_abcd(Fn, Fa, Fv, Fa);
+  const auto R_AV_naav = BSM_Vee::R_AV_abcd(Fn, Fa, Fa, Fv);
+  const auto R_VA_naav = BSM_Vee::R_AV_abcd(Fa, Fn, Fv, Fa);
+
+  std::cout << "\n  VA direct: " << R_VA_nava << "\n  AV direct: " << R_AV_nava
+            << "\nVA exchange: " << R_VA_naav << "\nAV exchange: " << R_AV_naav
+            << "\n\nVA + AV   direct: " << R_VA_nava + R_AV_nava
+            << "\nVA + AV exchange: " << R_VA_naav + R_AV_naav;
 }
 
 void ee_isotope_shift(const std::string int_type, const IO::InputBlock &input,
@@ -580,7 +671,6 @@ void matrix_elements(const Wavefunction &wf, const DiracSpinor &Fv,
       }
     }
   }
-
   if (tdhf) {
     std::cout << "\nRunning TDHF.\n";
   } else {
