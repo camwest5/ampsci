@@ -4,6 +4,7 @@
 
 namespace Module {
 void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf);
+void test_CI(const IO::InputBlock &input, const Wavefunction &wf);
 void find_fierz(const IO::InputBlock &input, const Wavefunction &wf);
 
 double calc_ME(const std::string op, const std::string type, const bool contact,
