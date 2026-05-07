@@ -73,11 +73,17 @@ private:
 inline std::unique_ptr<DiracOperator::TensorOperator>
 generate_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
   using namespace DiracOperator;
-  input.check({{"no options", ""}});
+  input.check({{"contact", "contact interaction? [false]"},
+               {"mu", "mediator mass in mc/hbar [1]"}});
+
+  const bool contact = input.get("contact", false);
+  const double mu = input.get("mu", 1.0);
+  // const std::string type = input.get<std::string>("type", "sp");
+
   if (input.has_option("help")) {
     return nullptr;
   }
-  return std::make_unique<Vee>(wf.core(), false, 1.0, "", false);
+  return std::make_unique<Vee>(wf.core(), contact, mu, "sp", false);
 }
 
 } // namespace DiracOperator

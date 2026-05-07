@@ -1,10 +1,12 @@
 #include "Modules/BSM_Vee.hpp"
 #include "Angular/Wigner369j.hpp"
+#include "CI/CI_Integrals.hpp"
 #include "DiracOperator/Operators/Ek.hpp"
 #include "DiracOperator/Operators/Vee.hpp"
 #include "ExternalField/DiagramRPA.hpp"
 #include "ExternalField/TDHF.hpp"
 #include "ExternalField/TDHFbasis.hpp"
+#include "ExternalField/calcMatrixElements.hpp"
 #include "IO/InputBlock.hpp"
 #include "Maths/NumCalc_quadIntegrate.hpp"
 #include "Maths/SphericalBessel.hpp"
@@ -40,7 +42,8 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
        {"kappa", "Kappa for state [ground]"},
        {"A2", "Second isotope's mass (for 'ss' or 'vv') [A+5]"},
        {"g0", "Include the gamma-0 term on both electrons? [true]"},
-       {"test", "Run module testing [false]"}});
+       {"test", "Run module testing [false]"},
+       {"ci_basis", "ci_basis, to be removed!"}});
 
   // If we are just requesting 'help', don't run module:
   if (input.has_option("help")) {
@@ -125,11 +128,68 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
 
 void test_CI(const IO::InputBlock &input, const Wavefunction &wf) {
   std::cout << "\nTesting CI;";
+  std::cout << "\n\nAttempting matrix elements:\n";
+  // Sum over basis of CSFs?
 
-  std::cout << wf.CIwfs().size() << "\n";
+  // TODO: this currently pulls the basis from the **MODULE** not from **CI**.
+  // this is bad, but is because the CI basis is not stored in wf.
+  // Ideally, store the CI basis in wf?
 
-  for (auto ci_wf : wf.CIwfs()) {
-    std::cout << ci_wf.energy(0);
+  const auto basis_string = input.get<std::string>("ci_basis", "");
+  const std::vector<DiracSpinor> ci_basis =
+      CI::basis_subset(wf.basis(), basis_string, wf.coreConfiguration());
+
+  const std::string contact_str = input.get<std::string>("contact", "false");
+  const auto type = input.get<std::string>("type", "sp");
+
+  const double mu = 2.0;
+  const auto mu_str = std::to_string(mu);
+  const auto VeeOptions = "contact=" + contact_str + ";mu=" + mu_str + ";";
+  std::cout << "\nTesting with " << VeeOptions;
+
+  const auto VeeOp =
+      DiracOperator::generate_Vee(IO::InputBlock("Vee", VeeOptions), wf);
+
+  const auto d = DiracOperator::generate_E1(IO::InputBlock("E1", ""), wf);
+
+  std::cout << "\nCalculating matrix element tables.." << std::flush;
+  auto Vee_table =
+      ExternalField::me_table(ci_basis, VeeOp.get(), nullptr, nullptr);
+  std::cout << "..Vee done.." << std::flush;
+
+  auto d_table = ExternalField::me_table(ci_basis, d.get(), nullptr, nullptr);
+  std::cout << "..E1 done.\n\n" << std::flush;
+
+  const int iV = 0;
+  const int J_V = 2;
+  const auto wf_V = *wf.CIwf(J_V, -1);
+  const auto E_V = wf_V.energy(iV);
+
+  const auto n_tests = std::min(5ul, wf_V.num_solutions());
+  std::cout << "Calculating and printing " << n_tests
+            << " solutions per J/π\n\n";
+
+  std::cout << "       V        |        N        | \n";
+  std::cout << "J   π  #  conf. | J   π  #  conf. |  <V||d||N>    <N|Vee|V>\n";
+
+  for (auto wf_N : wf.CIwfs()) {
+    for (int iN = 0; iN < n_tests; ++iN) {
+      const auto V_rme = CI::ReducedME(wf_N, iN, wf_V, iV, Vee_table,
+                                       VeeOp->rank(), VeeOp->parity());
+
+      const auto d_rme =
+          CI::ReducedME(wf_V, 0, wf_N, iN, d_table, d->rank(), d->parity());
+
+      const auto dE = wf_N.energy(iN) - wf_V.energy(iV);
+
+      // Angular factors to get full ME, then print
+
+      fmt::print("{} {:3}  {}  {:5s} | {} {:3}  {}  {:5s} | {:10.7f}  "
+                 "{:10.7f}\n",
+                 0.5 * wf_V.twoJ(), wf_V.parity(), iV, wf_V.CSF(0).config(),
+                 0.5 * wf_N.twoJ(), wf_N.parity(), iN, wf_N.CSF(iN).config(),
+                 d_rme, V_rme);
+    }
   }
 }
 
