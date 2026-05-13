@@ -129,20 +129,24 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
 void test_CI(const IO::InputBlock &input, const Wavefunction &wf) {
   std::cout << "\nTesting CI;";
   std::cout << "\n\nAttempting matrix elements:\n";
-  // Sum over basis of CSFs?
-
-  // TODO: this currently pulls the basis from the **MODULE** not from **CI**.
-  // this is bad, but is because the CI basis is not stored in wf.
-  // Ideally, store the CI basis in wf?
 
   const auto basis_string = input.get<std::string>("ci_basis", "");
+  const auto contact = input.get<bool>("contact", false);
+
+  const double mu = 2;
+  const auto D = CI_edm(wf, basis_string, mu, contact, 2, -1, 0, true);
+  std::cout << "\n\nD = " << D << "au";
+}
+
+double CI_edm(const Wavefunction &wf, const std::string basis_string,
+              const double mu, const bool contact, const int J_V,
+              const int pi_V, const int i_V, const bool verbose) {
+
   const std::vector<DiracSpinor> ci_basis =
       CI::basis_subset(wf.basis(), basis_string, wf.coreConfiguration());
 
-  const std::string contact_str = input.get<std::string>("contact", "false");
-  const auto type = input.get<std::string>("type", "sp");
+  std::string contact_str = contact ? "true" : "false";
 
-  const double mu = 2.0;
   const auto mu_str = std::to_string(mu);
   const auto VeeOptions = "contact=" + contact_str + ";mu=" + mu_str + ";";
   std::cout << "\nTesting with " << VeeOptions;
@@ -152,45 +156,59 @@ void test_CI(const IO::InputBlock &input, const Wavefunction &wf) {
 
   const auto d = DiracOperator::generate_E1(IO::InputBlock("E1", ""), wf);
 
-  std::cout << "\nCalculating matrix element tables.." << std::flush;
+  if (verbose) {
+    std::cout << "\nCalculating matrix element tables.." << std::flush;
+  }
   auto Vee_table =
       ExternalField::me_table(ci_basis, VeeOp.get(), nullptr, nullptr);
-  std::cout << "..Vee done.." << std::flush;
-
   auto d_table = ExternalField::me_table(ci_basis, d.get(), nullptr, nullptr);
-  std::cout << "..E1 done.\n\n" << std::flush;
 
-  const int iV = 0;
-  const int J_V = 2;
-  const auto wf_V = *wf.CIwf(J_V, -1);
-  const auto E_V = wf_V.energy(iV);
+  if (verbose) {
+    std::cout << "..E1 done.\n\n" << std::flush;
+  }
 
-  const auto n_tests = std::min(5ul, wf_V.num_solutions());
-  std::cout << "Calculating and printing " << n_tests
-            << " solutions per J/π\n\n";
+  const auto wf_V = *wf.CIwf(J_V, pi_V);
+  const auto E_V = wf_V.energy(i_V);
 
-  std::cout << "       V        |        N        | \n";
-  std::cout << "J   π  #  conf. | J   π  #  conf. |  <V||d||N>    <N|Vee|V>\n";
+  const auto n_print = wf_V.num_solutions();
+
+  if (verbose) {
+    std::cout << "       V        |        N        | \n";
+    std::cout << "J   π  #  conf. | J   π  #  conf. |  <V|d|N>    <N|Vee|V>\n";
+  }
+
+  double D = 0.0;
 
   for (auto wf_N : wf.CIwfs()) {
-    for (int iN = 0; iN < n_tests; ++iN) {
-      const auto V_rme = CI::ReducedME(wf_N, iN, wf_V, iV, Vee_table,
+    for (int iN = 0; iN < n_print; ++iN) {
+      if (wf_N.parity() == wf_V.parity()) {
+        continue;
+      }
+      const auto V_rme = CI::ReducedME(wf_N, iN, wf_V, i_V, Vee_table,
                                        VeeOp->rank(), VeeOp->parity());
+      const double V_me = V_rme * VeeOp->rme3js(wf_N.twoJ(), wf_V.twoJ(), 2);
+
+      // For rme3js - is it acceptable to leave twomb=1? Should it be 2?
+      // mb is projection of Jb=2, mb takes -2,-1,0,1,2 and two_mb -4,-2,0,2,4 - never 1
 
       const auto d_rme =
           CI::ReducedME(wf_V, 0, wf_N, iN, d_table, d->rank(), d->parity());
+      const double d_me = d_rme * d->rme3js(wf_V.twoJ(), wf_N.twoJ(), 2);
 
-      const auto dE = wf_N.energy(iN) - wf_V.energy(iV);
+      const double dE = wf_N.energy(iN) - wf_V.energy(i_V);
 
-      // Angular factors to get full ME, then print
+      if (verbose) {
+        fmt::print("{} {:3}  {}  {:5s} | {} {:3}  {}  {:5s} | {:10.7f}  "
+                   "{:10.7f}\n",
+                   0.5 * wf_V.twoJ(), wf_V.parity(), i_V, wf_V.CSF(0).config(),
+                   0.5 * wf_N.twoJ(), wf_N.parity(), iN, wf_N.CSF(iN).config(),
+                   d_me, V_me);
+      }
 
-      fmt::print("{} {:3}  {}  {:5s} | {} {:3}  {}  {:5s} | {:10.7f}  "
-                 "{:10.7f}\n",
-                 0.5 * wf_V.twoJ(), wf_V.parity(), iV, wf_V.CSF(0).config(),
-                 0.5 * wf_N.twoJ(), wf_N.parity(), iN, wf_N.CSF(iN).config(),
-                 d_rme, V_rme);
+      D += 2 * d_me * V_me / dE;
     }
   }
+  return D / PhysConst::alpha;
 }
 
 void find_fierz(const IO::InputBlock &input, const Wavefunction &wf) {
