@@ -11,8 +11,13 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const bool eN,
                  const DiracSpinor &Fv, const std::string type,
                  const int kappa_n, const double y, const bool contact,
                  const double mu) {
-  if ((type != "sp") && (type != "va") && (type != "ss") && (type != "vv")) {
-    std::cout << "\n\n*****ONLY type = sp, va, ss or vv SUPPORTED*****";
+  if ((type != "sp") && (type != "va")) {
+    std::cout << "\n\n*****ONLY type = sp, va SUPPORTED*****";
+    return 0.0 * Fv;
+  } else if (type == "va" && contact == false) {
+    std::cout
+        << "\n\n*****WARNING: only contact limit supported for 'va' (applies "
+           "Fierz identity). Using contact == true!";
     return 0.0 * Fv;
   }
 
@@ -41,15 +46,18 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const bool eN,
   // For ee
   for (auto Fa : core) {
     const auto Fdir = calc_Fdir(type, Fa, Fv, contact, mu);
-    const auto Fexch = calc_Fexch(type, kappa_n, Fa, Fv, contact, mu);
 
-    VFv += Fdir - Fexch;
-    // VFv += 2.0 * Fdir;
+    if (type == "va") {
+      VFv += 2 * Fdir;
+    } else {
+      const auto Fexch = calc_Fexch(type, kappa_n, Fa, Fv, contact, mu);
+      VFv += Fdir - Fexch;
+    }
   }
 
   double mu_factor;
 
-  if (contact == true) {
+  if (type == "va" || contact == true) {
     mu_factor = 1.0 / (mu * mu);
   } else if (mu == 0) {
     mu_factor = 1.0;
