@@ -3,6 +3,7 @@
 #include "DiracOperator/Operators/Vee.hpp"
 #include "IO/InputBlock.hpp"
 #include "Wavefunction/Wavefunction.hpp"
+#include <gsl/gsl_sf.h>
 
 namespace BSM_Vee {
 
@@ -366,6 +367,7 @@ DiracSpinor old_i_g0_g5(const DiracSpinor &Fa) {
 }
 
 double mod_sph_bessel_i(double n, double x) {
+  gsl_set_error_handler_off();
   gsl_sf_result i_k;
   const int gsl_status = gsl_sf_bessel_Inu_e(n + 0.5, x, &i_k);
 
@@ -386,8 +388,11 @@ double mod_sph_bessel_i(double n, double x) {
 }
 
 double mod_sph_bessel_k(double n, double x) {
+  gsl_set_error_handler_off();
   gsl_sf_result k_k;
+  // std::cout << "test..." << std::flush;
   const int gsl_status = gsl_sf_bessel_Knu_e(n + 0.5, x, &k_k);
+  // std::cout << "...success";
 
   if (gsl_status == GSL_SUCCESS) {
     /*

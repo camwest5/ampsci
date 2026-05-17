@@ -100,28 +100,6 @@ void BSM_Vee(const IO::InputBlock &input, const Wavefunction &wf) {
                  "(vector-vector)\n is provided.";
   }
 
-  // // Additional, temp testing stuff - note, v = kappa_v, a = kappa_a and l = lambda
-  // for (double v = -10; v < 10; ++v) {
-  //   const auto jv = std::abs(v) - 0.5;
-  //   for (double a = -10; a < 10; ++a) {
-  //     const auto ja = std::abs(a) - 0.5;
-
-  //     for (double l = std::abs(ja - jv); l <= ja + jv; ++l) {
-  //       if ((int(ja + jv + l) % 2) == 0) {
-
-  //         const auto vaav = Angular::Ck_kk(l, -v, a) * Angular::Ck_kk(l, a, -v);
-  //         const auto avva = Angular::Ck_kk(l, a, v) * Angular::Ck_kk(l, -v, -a);
-
-  //         if ((vaav != 0) || (avva != 0)) {
-  //           std::cout << "\n"
-  //                     << v << " " << a << " " << l << "\t" << vaav << "\t"
-  //                     << avva;
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
-
   // Cleanup
   gsl_set_error_handler(e_handler);
 }
@@ -133,9 +111,26 @@ void test_CI(const IO::InputBlock &input, const Wavefunction &wf) {
   const auto basis_string = input.get<std::string>("ci_basis", "");
   const auto contact = input.get<bool>("contact", false);
 
-  const double mu = 2;
-  const auto D = CI_edm(wf, basis_string, mu, contact, 2, -1, 0, true);
-  std::cout << "\n\nD = " << D << "au";
+  const double min_mu = input.get<double>("min_mu", 1e-6);
+  const double max_mu = input.get<double>("max_mu", 20.0);
+  const double N_mu = input.get<double>("N_mu", 100);
+
+  std::vector<double> mus;
+  std::vector<double> Ds;
+  for (double log_mu = log(min_mu); log_mu < log(max_mu);
+       log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
+    const double mu = std::exp(log_mu);
+
+    const auto D = CI_edm(wf, basis_string, mu, contact, 2, -1, 0, false);
+
+    mus.push_back(mu);
+    Ds.push_back(D);
+  }
+
+  std::cout << "\n\n        mu          D\n";
+  for (int i = 0; i < mus.size(); ++i) {
+    fmt::print("{:10.7f} {:10.7f}", mus[i], Ds[i]);
+  }
 }
 
 double CI_edm(const Wavefunction &wf, const std::string basis_string,
@@ -149,19 +144,28 @@ double CI_edm(const Wavefunction &wf, const std::string basis_string,
 
   const auto mu_str = std::to_string(mu);
   const auto VeeOptions = "contact=" + contact_str + ";mu=" + mu_str + ";";
-  std::cout << "\nTesting with " << VeeOptions;
 
   const auto VeeOp =
       DiracOperator::generate_Vee(IO::InputBlock("Vee", VeeOptions), wf);
 
+  const auto Vee_rpa = ExternalField::make_rpa("diagram", VeeOp.get(), wf.vHF(),
+                                               true, wf.basis(), wf.identity());
+
+  Vee_rpa->solve_core(0.0, 300);
+
   const auto d = DiracOperator::generate_E1(IO::InputBlock("E1", ""), wf);
+
+  const auto d_rpa = ExternalField::make_rpa("TDHF", d.get(), wf.vHF(), true,
+                                             wf.basis(), wf.identity());
+  d_rpa->solve_core(0.0, 300);
 
   if (verbose) {
     std::cout << "\nCalculating matrix element tables.." << std::flush;
   }
   auto Vee_table =
-      ExternalField::me_table(ci_basis, VeeOp.get(), nullptr, nullptr);
-  auto d_table = ExternalField::me_table(ci_basis, d.get(), nullptr, nullptr);
+      ExternalField::me_table(ci_basis, VeeOp.get(), Vee_rpa.get(), nullptr);
+  auto d_table =
+      ExternalField::me_table(ci_basis, d.get(), d_rpa.get(), nullptr);
 
   if (verbose) {
     std::cout << "..E1 done.\n\n" << std::flush;
@@ -186,6 +190,7 @@ double CI_edm(const Wavefunction &wf, const std::string basis_string,
       }
       const auto V_rme = CI::ReducedME(wf_N, iN, wf_V, i_V, Vee_table,
                                        VeeOp->rank(), VeeOp->parity());
+
       const double V_me = V_rme * VeeOp->rme3js(wf_N.twoJ(), wf_V.twoJ(), 2);
 
       // For rme3js - is it acceptable to leave twomb=1? Should it be 2?
