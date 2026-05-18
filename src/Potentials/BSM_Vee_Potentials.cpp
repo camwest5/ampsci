@@ -12,12 +12,8 @@ DiracSpinor V_Fv(const std::vector<DiracSpinor> &core, const bool eN,
                  const int kappa_n, const double y, const bool contact,
                  const double mu) {
   if ((type != "sp") && (type != "va")) {
-    std::cout << "\n\n*****ONLY type = sp, va SUPPORTED*****";
     return 0.0 * Fv;
   } else if (type == "va" && contact == false) {
-    std::cout
-        << "\n\n*****WARNING: only contact limit supported for 'va' (applies "
-           "Fierz identity). Using contact == true!";
     return 0.0 * Fv;
   }
 
