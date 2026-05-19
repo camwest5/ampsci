@@ -973,6 +973,9 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
   if (eN) {
     std::cout << "\nWARNING: Calculating 'eN' rather than 'ee' - results are "
                  "not robust.\n";
+  } else if (type == "va" && contact == false) {
+    std::cout << "\NWARNING: Only contact limit (via Fierz identity) supported "
+                 "for VA at present. Defaulting to contact = true.\n";
   }
 
   double D_wv = 0.0;
