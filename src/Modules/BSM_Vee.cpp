@@ -129,7 +129,7 @@ void test_CI(const IO::InputBlock &input, const Wavefunction &wf) {
 
   std::cout << "\n\n        mu          D\n";
   for (int i = 0; i < mus.size(); ++i) {
-    fmt::print("{:10.7f} {:10.7f}", mus[i], Ds[i]);
+    fmt::print("{:10.7f} {:10.7f}\n", mus[i], Ds[i]);
   }
 }
 
