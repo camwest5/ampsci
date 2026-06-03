@@ -111,8 +111,8 @@ void test_CI(const IO::InputBlock &input, const Wavefunction &wf) {
   const auto basis_string = input.get<std::string>("ci_basis", "");
   const auto contact = input.get<bool>("contact", false);
 
-  const double min_mu = input.get<double>("min_mu", 1e-6);
-  const double max_mu = input.get<double>("max_mu", 20.0);
+  const double min_mu = input.get<double>("min_mu", 1e-4);
+  const double max_mu = input.get<double>("max_mu", 1e4);
   const double N_mu = input.get<double>("N_mu", 100);
 
   std::vector<double> mus;
