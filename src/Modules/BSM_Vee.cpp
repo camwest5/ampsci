@@ -116,17 +116,35 @@ void test_CI(const IO::InputBlock &input, const Wavefunction &wf) {
   const double N_mu = input.get<double>("N_mu", 100);
 
   std::vector<double> mus;
-  std::vector<double> Ds;
-  for (double log_mu = log(min_mu); log_mu < log(max_mu);
-       log_mu += std::abs(log(max_mu) - log(min_mu)) / N_mu) {
-    const double mu = std::exp(log_mu);
 
-    const auto D = CI_edm(wf, basis_string, mu, contact, 2, -1, 0, false);
+  // Populate mus
+  for (double log_mu = log(min_mu); log_mu <= log(max_mu);
+       log_mu += std::abs(log(max_mu) - log(min_mu)) * (1.0 / N_mu)) {
+    mus.push_back(std::exp(log_mu));
+  }
+  const auto actual_N_mu = mus.size();
 
-    mus.push_back(mu);
-    Ds.push_back(D);
+  std::vector<double> Ds(actual_N_mu);
+
+#pragma omp parallel default(none)                                             \
+    shared(actual_N_mu, wf, basis_string, contact, mus, Ds, std::cout)
+
+  {
+
+#pragma omp for
+    for (int i = 0; i < actual_N_mu; ++i) {
+      const double mu = mus[i];
+
+      const auto D = CI_edm(wf, basis_string, mu, contact, 2, -1, 0, false);
+
+#pragma omp critical
+      {
+        Ds[i] = D;
+      }
+    }
   }
 
+  // print
   std::cout << "\n\n        mu          D\n";
   for (int i = 0; i < mus.size(); ++i) {
     fmt::print("{:10.7f} {:10.7f}\n", mus[i], Ds[i]);
