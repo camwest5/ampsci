@@ -343,10 +343,10 @@ void matrixElements(const IO::InputBlock &input, const Wavefunction &wf) {
 
       const auto ww = 0.0;
 
-      fmt::print(os, " {:4s} {:4s}  {:10.7f}  {:13.6e}", a.shortSymbol(),
+      fmt::print(os, " {:4s} {:4s}  {:10.7f}  {:13.8e}", a.shortSymbol(),
                  a.shortSymbol(), ww, factor * hab);
       if (dv != 0.0) {
-        fmt::print(os, "  {:13.6e}", factor * (hab + dv));
+        fmt::print(os, "  {:13.8e}", factor * (hab + dv));
       }
 
       fmt::print(os, "\n");
@@ -403,10 +403,10 @@ void matrixElements(const IO::InputBlock &input, const Wavefunction &wf) {
         const auto dv = rpa ? rpa->dV(a, b) : 0.0;
         // const auto sub_tot = factor * (hab + dv);
 
-        fmt::print(os, " {:4s} {:4s}  {:10.7f}  {:13.6e}", a.shortSymbol(),
+        fmt::print(os, "{:4s} {:4s}  {:10.7f}  {:13.8e}", a.shortSymbol(),
                    b.shortSymbol(), ww_s, factor * hab);
         if (dv != 0.0) {
-          fmt::print(os, "  {:13.6e}", factor * (hab + dv));
+          fmt::print(os, "  {:13.8e}", factor * (hab + dv));
         }
         fmt::print(os, "\n");
       }
@@ -414,12 +414,14 @@ void matrixElements(const IO::InputBlock &input, const Wavefunction &wf) {
   }
 
   std::cout << "\n" << h->name() << "\n";
+  std::cout << ":::";
   std::cout << "\n   a    b    w_ab        t0_ab";
   if (rpaQ)
     std::cout << "          +RPA ";
   std::cout << "\n";
   std::cout << os.str();
   std::cout << "\n";
+  std::cout << ":::\n";
 }
 
 //============================================================================
@@ -800,12 +802,12 @@ void structureRad(const IO::InputBlock &input, const Wavefunction &wf) {
         fmt::print("{:8s}  {:12.5e}\n", "Total",
                    factor * (twvs + dvs + TBC + norm + T_bo));
 
-        fmt::print(os, "{:4s} {:4s} {:+.4e}  {:+.4e}  {:+.4e}", w.shortSymbol(),
+        fmt::print(os, "{:4s} {:4s} {:+.8e}  {:+.8e}  {:+.8e}", w.shortSymbol(),
                    v.shortSymbol(), factor * (twvs + dvs), factor * TBC,
                    factor * norm);
         if (!have_brueckner)
-          fmt::print(os, "  {:+.4e}", factor * T_bo);
-        fmt::print(os, "  {:+.4e}", factor * (twvs + dvs + TBC + T_bo + norm));
+          fmt::print(os, "  {:+.8e}", factor * T_bo);
+        fmt::print(os, "  {:+.8e}", factor * (twvs + dvs + TBC + T_bo + norm));
         fmt::print(os, "\n");
       }
     }
@@ -826,12 +828,13 @@ void structureRad(const IO::InputBlock &input, const Wavefunction &wf) {
     std::cout << " - Unkown matrix element type?\n";
   }
   std::cout << "Units: " << h->units() << "\n\n";
-
+  std::cout << ":::\n";
   std::cout << "           T1           SR           Norm         ";
   if (!have_brueckner)
     std::cout << "BO           Total";
   std::cout << "\n";
   std::cout << os.str() << std::endl;
+  std::cout << ":::\n";
 
   return;
 }
