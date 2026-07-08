@@ -1007,7 +1007,7 @@ double calc_Dwv(const std::string type, const bool contact, const double mu,
   if (tdhf) {
     std::cout << "\nμ = " << mu << "\n";
     tdhf_d.solve_core(omega, 100, true);
-    drpa_Vee.solve_core(omega, 100, true);
+    drpa_Vee.solve_core(0.0, 100, true);
   }
 
   for (auto Fn : wf.basis()) {
