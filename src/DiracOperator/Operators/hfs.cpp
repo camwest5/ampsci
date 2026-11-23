@@ -42,7 +42,7 @@ RadialFunction pointlike_F() {
 //------------------------------------------------------------------------------
 // 'Volotka' single-particle model: see Phys. Rev. Lett. 125, 063002 (2020)
 RadialFunction VolotkaSP_F(double mu, double I_nuc, double l_pn, int gl,
-                           bool print)
+                           bool bw_only, bool print)
 
 // Function that returns generates + returns F_BW Bohr-Weiskopf
 // gl = 1 for proton, =0 for neutron. Double allowed for testing..
@@ -70,9 +70,11 @@ RadialFunction VolotkaSP_F(double mu, double I_nuc, double l_pn, int gl,
     return [](double, double) { return 0.0; };
   }
   return [=](double r, double rN) {
-    return (r > rN) ? 1.0 :
-                      ((r * r * r) / (rN * rN * rN)) *
-                        (1.0 - (3.0 / mu) * std::log(r / rN) * factor);
+    const double bw_offset = bw_only ? 1.0 : 0.0;
+    return ((r > rN) ? 1.0 :
+                       ((r * r * r) / (rN * rN * rN)) *
+                         (1.0 - (3.0 / mu) * std::log(r / rN) * factor)) -
+           bw_offset;
   };
 }
 

@@ -90,7 +90,7 @@ RadialFunction pointlike_F();
   @return Radial function \f$ F_{\mathrm{BW}}(r, r_N) \f$
 */
 RadialFunction VolotkaSP_F(double mu, double I_nuc, double l_pn, int gl,
-                           bool print = true);
+                           bool bw_only = false, bool print = true);
 
 /*!
   @brief Elizarov single-particle magnetisation model [extended Volotka]
@@ -349,6 +349,8 @@ public:
        {"printF", "Writes F(r) to a text file [false]"},
        {"print", "Write F(r) info to screen [true]"},
        {"", "The following are only for F=SingleParticle or doublyOddSP"},
+       {"bw_only",
+        "Use F(r) -> F(r)-1 (gives absolute BW contribution only) [false]"},
        {"I", "Nuclear spin. Taken from nucleus"},
        {"parity", "Nulcear parity: +/-1"},
        {"l", "l for unpaired nucleon (automatically derived from I and "
@@ -480,6 +482,7 @@ public:
       Fr = Hyperfine::sphericalShell_F();
 
     } else if (distro_type == DistroType::SingleParticle) {
+      const auto bw_only = input.get("bw_only", false);
       const auto pi = input.get("parity", isotope.parity ? *isotope.parity : 0);
       const auto l_tmp = int(I_nuc + 0.5 + 0.0001);
       auto l = ((l_tmp % 2 == 0) == (pi == 1)) ? l_tmp : l_tmp - 1;
@@ -497,7 +500,7 @@ public:
                     << "??? program will run, but prob wrong!\n";
         std::cout << "with l=" << l << " (pi=" << pi << ")\n";
       }
-      Fr = Hyperfine::VolotkaSP_F(mu, I_nuc, l, gl, print);
+      Fr = Hyperfine::VolotkaSP_F(mu, I_nuc, l, gl, bw_only, print);
 
     } else if (distro_type == DistroType::uSP) {
       const auto pi = input.get("parity", isotope.parity ? *isotope.parity : 0);
